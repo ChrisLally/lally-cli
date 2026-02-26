@@ -3,6 +3,7 @@ import { runCheckCommand } from "./commands/check/index";
 import { runCleanCommand } from "./commands/clean/index";
 import { runInitCommand } from "./commands/init/index";
 import { runReleaseCommand } from "./commands/release/index";
+import { runSyncCommand } from "./commands/sync/index";
 import { runUpdateCommand } from "./commands/update/index";
 
 type CliArgs = {
@@ -26,6 +27,7 @@ function printHelp() {
   console.log("  add       Add scaffolds (fumadocs, db)");
   console.log("  check     Validate project setup (read-only)");
   console.log("  clean     Clean template leftovers (safe dry-run default)");
+  console.log("  sync      Sync package/app slices to public repos");
   console.log("  update    Run maintenance/update utilities");
   console.log("  release   Publish @chris-lally packages");
   console.log("");
@@ -34,6 +36,7 @@ function printHelp() {
   console.log("  lally add <namespace/item> [--app <path>]");
   console.log("  lally check fumadocs [--app <path>] [--strict-layout] [--json]");
   console.log("  lally clean fumadocs [--app <path>] [--keep <glob>] [--apply] [--delete]");
+  console.log("  lally sync <init|doctor|push|pull> [options]");
   console.log("  lally update subtree --script <script-name> [--dir <path>] [--json]");
   console.log("  lally update layout --preset notebook-topnav [--app <path>]");
   console.log("  lally update readme --target <name> [--check]");
@@ -48,6 +51,8 @@ function printHelp() {
   console.log("  lally clean fumadocs --app apps/web");
   console.log("  lally clean fumadocs --app apps/web --apply");
   console.log("  lally add db/local-postgres --app apps/web");
+  console.log("  lally sync doctor --target statements");
+  console.log("  lally sync push --target statements");
   console.log("  lally update subtree --script sync-push.sh");
   console.log("  lally update subtree --target statements --action push");
   console.log("  lally update layout --preset notebook-topnav --app apps/web");
@@ -93,6 +98,13 @@ export async function runCli(argv: string[]) {
   if (command === "release") {
     const [target, ...releaseArgs] = rest;
     const code = await runReleaseCommand(target, releaseArgs);
+    if (code !== 0) process.exitCode = code;
+    return;
+  }
+
+  if (command === "sync") {
+    const [subcommand, ...syncArgs] = rest;
+    const code = await runSyncCommand(subcommand, syncArgs);
     if (code !== 0) process.exitCode = code;
     return;
   }
