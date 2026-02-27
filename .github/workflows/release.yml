@@ -33,15 +33,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm --version
+          export NPM_VERSION="$(npm --version)"
+          echo "$NPM_VERSION"
           node -e '
-            const [major, minor, patch] = process.versions.npm.split(".").map(Number);
-            const ok = major > 11 || (major === 11 && (minor > 5 || (minor === 5 && patch >= 1)));
-            if (!ok) {
-              console.error(`npm ${process.versions.npm} is too old for trusted publishing (need >= 11.5.1)`);
+            const version = process.env.NPM_VERSION;
+            if (!version) {
+              console.error("npm version is unavailable in environment");
               process.exit(1);
             }
-          '
+            const [major, minor, patch] = version.split(".").map(Number);
+            const ok = major > 11 || (major === 11 && (minor > 5 || (minor === 5 && patch >= 1)));
+            if (!ok) {
+              console.error(`npm ${version} is too old for trusted publishing (need >= 11.5.1)`);
+              process.exit(1);
+            }
+          ' 
 
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
