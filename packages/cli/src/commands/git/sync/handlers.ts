@@ -14,6 +14,11 @@ type SyncRelease = {
   releaseVersion: string | null;
 };
 
+type VersionTarget = {
+  packageJsonPath: string;
+  version: string;
+};
+
 /**
  * @description List dirty files under a target prefix (tracked and untracked) using git porcelain output.
  */
@@ -68,6 +73,23 @@ function nextAlphaVersion(current: string): string {
 }
 
 /**
+ * @description Resolve a package.json with a version for release tagging, supporting monorepo prefixes.
+ */
+async function resolveVersionTarget(repoRoot: string, target: SyncTarget): Promise<VersionTarget> {
+  const candidates = [resolve(repoRoot, target.prefix, "package.json"), resolve(repoRoot, target.prefix, "packages/cli/package.json")];
+
+  for (const packageJsonPath of candidates) {
+    if (!existsSync(packageJsonPath)) continue;
+    const pkg = JSON.parse(await readFile(packageJsonPath, "utf8")) as { version?: string };
+    if (pkg.version) {
+      return { packageJsonPath, version: pkg.version };
+    }
+  }
+
+  throw new Error(`Missing version in ${candidates[0]}`);
+}
+
+/**
  * @description Resolve tag/release metadata from user tag input (explicit tag or alpha shorthand).
  */
 async function resolveReleaseFromTagInput(
@@ -83,16 +105,8 @@ async function resolveReleaseFromTagInput(
     throw new Error("--tag alpha requires snapshot mode");
   }
 
-  const packageJsonPath = resolve(repoRoot, target.prefix, "package.json");
-  if (!existsSync(packageJsonPath)) {
-    throw new Error(`--tag alpha requires a package.json under target prefix: ${packageJsonPath}`);
-  }
-
-  const pkg = JSON.parse(await readFile(packageJsonPath, "utf8")) as { version?: string };
-  const currentVersion = pkg.version;
-  if (!currentVersion) {
-    throw new Error(`Missing version in ${packageJsonPath}`);
-  }
+  const versionTarget = await resolveVersionTarget(repoRoot, target);
+  const currentVersion = versionTarget.version;
 
   const releaseVersion = nextAlphaVersion(currentVersion);
   return {
@@ -105,11 +119,8 @@ async function resolveReleaseFromTagInput(
  * @description Update local package.json version under the sync target prefix.
  */
 async function updateLocalPackageVersion(repoRoot: string, target: SyncTarget, version: string): Promise<void> {
-  const packageJsonPath = resolve(repoRoot, target.prefix, "package.json");
-  if (!existsSync(packageJsonPath)) {
-    throw new Error(`Cannot update local version, package.json not found: ${packageJsonPath}`);
-  }
-
+  const versionTarget = await resolveVersionTarget(repoRoot, target);
+  const packageJsonPath = versionTarget.packageJsonPath;
   const pkg = JSON.parse(await readFile(packageJsonPath, "utf8")) as { version?: string };
   pkg.version = version;
   await writeFile(packageJsonPath, `${JSON.stringify(pkg, null, 2)}\n`, "utf8");
@@ -268,7 +279,8 @@ export async function runSyncAction(action: "push" | "pull", args: string[]): Pr
   try {
     const sync = getSyncSection(config);
     target = resolveTarget(sync, targetName);
-    release = await resolveReleaseFromTagInput(repoRoot, targetName, target, tagInput);
+    const effectiveTagInput = action === "push" && target.mode === "snapshot" ? (tagInput ?? "alpha") : tagInput;
+    release = await resolveReleaseFromTagInput(repoRoot, targetName, target, effectiveTagInput);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (json) printJson({ ok: false, error: message });
