@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { getStringFlag, hasFlag, parseArgs } from "./args";
 import { findRepoRoot, loadConfig, LallyConfig, SyncTarget, writeConfig } from "./config";
@@ -8,6 +9,80 @@ import { pullTarget, pushHistory, pushSnapshot } from "./native";
 import { printJson } from "./output";
 import { getBranch, getSyncSection, resolveTarget } from "./resolve";
 
+type SyncRelease = {
+  tagName: string | null;
+  releaseVersion: string | null;
+};
+
+/**
+ * @description Compute the next alpha prerelease version from the current semver.
+ */
+function nextAlphaVersion(current: string): string {
+  const alpha = current.match(/^(\d+)\.(\d+)\.(\d+)-alpha\.(\d+)$/);
+  if (alpha) {
+    const [, major, minor, patch, n] = alpha;
+    return `${major}.${minor}.${patch}-alpha.${Number(n) + 1}`;
+  }
+
+  const base = current.match(/^(\d+)\.(\d+)\.(\d+)$/);
+  if (base) {
+    return `${base[1]}.${base[2]}.${base[3]}-alpha.1`;
+  }
+
+  throw new Error(`Unsupported package version for alpha release: ${current}`);
+}
+
+/**
+ * @description Resolve tag/release metadata from user tag input (explicit tag or alpha shorthand).
+ */
+async function resolveReleaseFromTagInput(
+  repoRoot: string,
+  targetName: string,
+  target: SyncTarget,
+  tagInput: string | null,
+): Promise<SyncRelease> {
+  if (!tagInput) return { tagName: null, releaseVersion: null };
+  if (tagInput !== "alpha") return { tagName: tagInput, releaseVersion: null };
+
+  if (target.mode !== "snapshot") {
+    throw new Error("--tag alpha requires snapshot mode");
+  }
+
+  const packageJsonPath = resolve(repoRoot, target.prefix, "package.json");
+  if (!existsSync(packageJsonPath)) {
+    throw new Error(`--tag alpha requires a package.json under target prefix: ${packageJsonPath}`);
+  }
+
+  const pkg = JSON.parse(await readFile(packageJsonPath, "utf8")) as { version?: string };
+  const currentVersion = pkg.version;
+  if (!currentVersion) {
+    throw new Error(`Missing version in ${packageJsonPath}`);
+  }
+
+  const releaseVersion = nextAlphaVersion(currentVersion);
+  return {
+    tagName: `${targetName}-v${releaseVersion}`,
+    releaseVersion,
+  };
+}
+
+/**
+ * @description Update local package.json version under the sync target prefix.
+ */
+async function updateLocalPackageVersion(repoRoot: string, target: SyncTarget, version: string): Promise<void> {
+  const packageJsonPath = resolve(repoRoot, target.prefix, "package.json");
+  if (!existsSync(packageJsonPath)) {
+    throw new Error(`Cannot update local version, package.json not found: ${packageJsonPath}`);
+  }
+
+  const pkg = JSON.parse(await readFile(packageJsonPath, "utf8")) as { version?: string };
+  pkg.version = version;
+  await writeFile(packageJsonPath, `${JSON.stringify(pkg, null, 2)}\n`, "utf8");
+}
+
+/**
+ * @description Create or update a sync target entry in lally.config.json.
+ */
 export async function runSyncInit(args: string[]): Promise<number> {
   const { flags } = parseArgs(["init", ...args]);
   const target = getStringFlag(flags, "target");
@@ -51,6 +126,9 @@ export async function runSyncInit(args: string[]): Promise<number> {
   return 0;
 }
 
+/**
+ * @description Validate a configured sync target and report operational readiness checks.
+ */
 export async function runSyncDoctor(args: string[]): Promise<number> {
   const { flags } = parseArgs(["doctor", ...args]);
   const targetName = getStringFlag(flags, "target");
@@ -116,9 +194,13 @@ export async function runSyncDoctor(args: string[]): Promise<number> {
   return ok ? 0 : 1;
 }
 
+/**
+ * @description Execute native push/pull flows for a sync target with optional tag handling.
+ */
 export async function runSyncAction(action: "push" | "pull", args: string[]): Promise<number> {
   const { flags } = parseArgs([action, ...args]);
   const targetName = getStringFlag(flags, "target");
+  const tagInput = getStringFlag(flags, "tag");
   const json = hasFlag(flags, "json");
   const dryRun = hasFlag(flags, "dry-run");
 
@@ -128,13 +210,22 @@ export async function runSyncAction(action: "push" | "pull", args: string[]): Pr
     return 1;
   }
 
+  if (action === "pull" && tagInput) {
+    const message = "--tag is only supported for sync push";
+    if (json) printJson({ ok: false, error: message });
+    else console.error(message);
+    return 1;
+  }
+
   const repoRoot = findRepoRoot(process.cwd());
   const config = await loadConfig(repoRoot);
 
   let target: SyncTarget;
+  let release: SyncRelease = { tagName: null, releaseVersion: null };
   try {
     const sync = getSyncSection(config);
     target = resolveTarget(sync, targetName);
+    release = await resolveReleaseFromTagInput(repoRoot, targetName, target, tagInput);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (json) printJson({ ok: false, error: message });
@@ -152,16 +243,31 @@ export async function runSyncAction(action: "push" | "pull", args: string[]): Pr
       prefix: target.prefix,
       remoteUrl: target.remoteUrl,
       branch: getBranch(target),
+      ...(release.tagName ? { tag: release.tagName } : {}),
+      ...(release.releaseVersion ? { releaseVersion: release.releaseVersion } : {}),
     };
     if (json) printJson(payload);
-    else console.log(`[dry-run] would run native ${action} (${target.mode}) for '${targetName}'`);
+    else
+      console.log(
+        `[dry-run] would run native ${action} (${target.mode}) for '${targetName}'${release.tagName ? ` with tag ${release.tagName}` : ""}`,
+      );
     return 0;
   }
 
   try {
     if (action === "push") {
-      if (target.mode === "snapshot") await pushSnapshot(repoRoot, target);
-      else pushHistory(repoRoot, targetName, target);
+      if (target.mode === "snapshot") {
+        await pushSnapshot(repoRoot, target, {
+          tagName: release.tagName ?? undefined,
+          releaseVersion: release.releaseVersion ?? undefined,
+        });
+      } else {
+        pushHistory(repoRoot, targetName, target, { tagName: release.tagName ?? undefined });
+      }
+
+      if (release.releaseVersion) {
+        await updateLocalPackageVersion(repoRoot, target, release.releaseVersion);
+      }
     } else {
       pullTarget(repoRoot, target);
     }

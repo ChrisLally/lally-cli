@@ -15,6 +15,9 @@ export type LallyConfig = {
   };
 };
 
+/**
+ * @description Walk upward from a start directory until the pnpm workspace root is found.
+ */
 export function findRepoRoot(startDir: string): string {
   let dir = resolve(startDir);
   for (let i = 0; i < 24; i += 1) {
@@ -26,6 +29,9 @@ export function findRepoRoot(startDir: string): string {
   throw new Error("Could not find repo root (missing pnpm-workspace.yaml).");
 }
 
+/**
+ * @description Load lally.config.json from repo root, returning an empty object when missing.
+ */
 export async function loadConfig(repoRoot: string): Promise<LallyConfig> {
   const configPath = resolve(repoRoot, "lally.config.json");
   try {
@@ -36,6 +42,9 @@ export async function loadConfig(repoRoot: string): Promise<LallyConfig> {
   }
 }
 
+/**
+ * @description Persist lally.config.json in repo root with stable pretty formatting.
+ */
 export async function writeConfig(repoRoot: string, value: LallyConfig): Promise<void> {
   const configPath = resolve(repoRoot, "lally.config.json");
   await writeFile(configPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");

@@ -1,6 +1,9 @@
 import { syncHelp } from "./help";
 import { runSyncAction, runSyncDoctor, runSyncInit } from "./handlers";
 
+/**
+ * @description Route sync subcommands to their concrete handlers.
+ */
 export async function runSyncCommand(command: string | undefined, args: string[]): Promise<number> {
   if (!command || command === "--help" || command === "-h" || command === "help") {
     console.log(syncHelp());

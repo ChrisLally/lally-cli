@@ -6,7 +6,30 @@ import { SyncTarget } from "./config";
 import { ensureOk, runBash, runCommand } from "./exec";
 import { getBranch, getSyncAuthor } from "./resolve";
 
-export async function pushSnapshot(repoRoot: string, target: SyncTarget): Promise<void> {
+/**
+ * @description Ensure a tag does not already exist on the remote before attempting to push it.
+ */
+function assertTagMissingOnRemote(repoRoot: string, remoteUrl: string, tagName: string) {
+  const check = runCommand("git", ["ls-remote", "--tags", remoteUrl, `refs/tags/${tagName}`], repoRoot);
+  if (check.status !== 0) {
+    throw new Error(`failed to query remote tags for ${tagName}`);
+  }
+
+  if (check.stdout.trim().length > 0) {
+    throw new Error(`tag already exists on remote: ${tagName}`);
+  }
+}
+
+/**
+ * @description Push a snapshot of a target prefix to a standalone repo, optionally tagging and bumping version.
+ */
+export async function pushSnapshot(
+  repoRoot: string,
+  target: SyncTarget,
+  options?: { tagName?: string; releaseVersion?: string },
+): Promise<void> {
+  const tagName = options?.tagName;
+  const releaseVersion = options?.releaseVersion;
   const exportDir = await mkdtemp(join(tmpdir(), "lally-sync-export-"));
   const cloneDir = await mkdtemp(join(tmpdir(), "lally-sync-clone-"));
 
@@ -37,6 +60,18 @@ export async function pushSnapshot(repoRoot: string, target: SyncTarget): Promis
 
     ensureOk(runCommand("bash", ["-lc", `rsync -a --delete --exclude ".git/" "${exportedPrefix}/" "${cloneDir}/"`], repoRoot), "rsync snapshot");
 
+    if (releaseVersion) {
+      const setVersion = runCommand(
+        "node",
+        [
+          "-e",
+          `const fs=require('fs');const p='${cloneDir.replaceAll("'", "'\\''")}/package.json';const v='${releaseVersion}';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.version=v;fs.writeFileSync(p,JSON.stringify(j,null,2)+'\\n');`,
+        ],
+        repoRoot,
+      );
+      ensureOk(setVersion, "set package version");
+    }
+
     ensureOk(runCommand("git", ["add", "-A"], cloneDir), "git add");
     const hasChanges = runCommand("git", ["diff", "--cached", "--quiet"], cloneDir).status !== 0;
     if (!hasChanges) {
@@ -54,26 +89,57 @@ export async function pushSnapshot(repoRoot: string, target: SyncTarget): Promis
 
     ensureOk(runCommand("git", ["commit", "-m", `chore: sync snapshot from ${target.prefix} (${sha})`], cloneDir), "git commit");
     ensureOk(runCommand("git", ["push", "origin", `${branch}:${branch}`], cloneDir), "git push");
+
+    if (tagName) {
+      assertTagMissingOnRemote(repoRoot, target.remoteUrl, tagName);
+      ensureOk(runCommand("git", ["tag", tagName], cloneDir), "git tag");
+      ensureOk(runCommand("git", ["push", "origin", `refs/tags/${tagName}`], cloneDir), "git push tag");
+    }
   } finally {
     await rm(exportDir, { recursive: true, force: true });
     await rm(cloneDir, { recursive: true, force: true });
   }
 }
 
-export function pushHistory(repoRoot: string, targetName: string, target: SyncTarget): void {
+/**
+ * @description Push history-preserving subtree split to a standalone repo, optionally tagging the pushed commit.
+ */
+export function pushHistory(
+  repoRoot: string,
+  targetName: string,
+  target: SyncTarget,
+  options?: { tagName?: string; releaseVersion?: string },
+): void {
+  const tagName = options?.tagName;
+  const releaseVersion = options?.releaseVersion;
+  if (releaseVersion) {
+    throw new Error("release version bump is only supported for snapshot mode");
+  }
+
   const branch = getBranch(target);
   const splitBranch = `codex/sync-${targetName}-split`;
+  const tempTag = tagName ? `codex/sync-${targetName}-tag` : null;
 
   runCommand("git", ["branch", "-D", splitBranch], repoRoot);
+  if (tempTag) runCommand("git", ["tag", "-d", tempTag], repoRoot);
   ensureOk(runCommand("git", ["subtree", "split", "--prefix", target.prefix, "-b", splitBranch], repoRoot), "git subtree split");
 
   try {
     ensureOk(runCommand("git", ["push", target.remoteUrl, `${splitBranch}:${branch}`], repoRoot), "git push split branch");
+    if (tagName && tempTag) {
+      assertTagMissingOnRemote(repoRoot, target.remoteUrl, tagName);
+      ensureOk(runCommand("git", ["tag", tempTag, splitBranch], repoRoot), "git tag");
+      ensureOk(runCommand("git", ["push", target.remoteUrl, `${tempTag}:refs/tags/${tagName}`], repoRoot), "git push tag");
+    }
   } finally {
     runCommand("git", ["branch", "-D", splitBranch], repoRoot);
+    if (tempTag) runCommand("git", ["tag", "-d", tempTag], repoRoot);
   }
 }
 
+/**
+ * @description Pull changes from a standalone repo into the monorepo prefix using squash mode.
+ */
 export function pullTarget(repoRoot: string, target: SyncTarget): void {
   const branch = getBranch(target);
   // Keep private repo history compact on inbound syncs.
