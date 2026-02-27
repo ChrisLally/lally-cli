@@ -151,3 +151,20 @@ jobs:
       - name: Publish package
         working-directory: ${{ inputs.package_dir }}
         run: npm publish --provenance --access public --tag ${{ steps.dist_tag.outputs.tag }}
+
+  release:
+    needs: publish
+    runs-on: ubuntu-latest
+    environment:
+      name: npm-${{ needs.publish.outputs.dist_tag }}
+    permissions:
+      contents: write
+      deployments: write
+    steps:
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.publish.outputs.tag_name }}
+          name: ${{ needs.publish.outputs.tag_name }}
+          prerelease: ${{ needs.publish.outputs.prerelease }}
+          generate_release_notes: true
