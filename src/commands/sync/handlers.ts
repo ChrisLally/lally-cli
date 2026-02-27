@@ -15,6 +15,41 @@ type SyncRelease = {
 };
 
 /**
+ * @description List dirty files under a target prefix (tracked and untracked) using git porcelain output.
+ */
+function getDirtyFilesForPrefix(repoRoot: string, prefix: string): string[] {
+  const result = runCommand("git", ["status", "--porcelain", "--untracked-files=all", "--", prefix], repoRoot);
+  if (result.status !== 0) {
+    throw new Error("Unable to inspect git status for sync target prefix.");
+  }
+
+  return result.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.replace(/^[ MARCUD?!]{2}\s+/, ""));
+}
+
+/**
+ * @description Commit only target prefix changes before sync push when --commit message is provided.
+ */
+function commitTargetPrefixChanges(repoRoot: string, prefix: string, message: string): void {
+  const add = runCommand("git", ["add", "-A", "--", prefix], repoRoot);
+  if (add.status !== 0) {
+    throw new Error("Failed to stage sync target changes.");
+  }
+
+  const hasStaged = runCommand("git", ["diff", "--cached", "--quiet", "--", prefix], repoRoot).status !== 0;
+  if (!hasStaged) return;
+
+  const commit = runCommand("git", ["commit", "-m", message, "--", prefix], repoRoot);
+  if (commit.status !== 0) {
+    const details = [commit.stdout?.trim(), commit.stderr?.trim()].filter(Boolean).join("\n");
+    throw new Error(details || "Failed to commit sync target changes.");
+  }
+}
+
+/**
  * @description Compute the next alpha prerelease version from the current semver.
  */
 function nextAlphaVersion(current: string): string {
@@ -201,6 +236,7 @@ export async function runSyncAction(action: "push" | "pull", args: string[]): Pr
   const { flags } = parseArgs([action, ...args]);
   const targetName = getStringFlag(flags, "target");
   const tagInput = getStringFlag(flags, "tag");
+  const commitMessage = getStringFlag(flags, "commit");
   const json = hasFlag(flags, "json");
   const dryRun = hasFlag(flags, "dry-run");
 
@@ -212,6 +248,13 @@ export async function runSyncAction(action: "push" | "pull", args: string[]): Pr
 
   if (action === "pull" && tagInput) {
     const message = "--tag is only supported for sync push";
+    if (json) printJson({ ok: false, error: message });
+    else console.error(message);
+    return 1;
+  }
+
+  if (action === "pull" && commitMessage) {
+    const message = "--commit is only supported for sync push";
     if (json) printJson({ ok: false, error: message });
     else console.error(message);
     return 1;
@@ -234,6 +277,7 @@ export async function runSyncAction(action: "push" | "pull", args: string[]): Pr
   }
 
   if (dryRun) {
+    const dirtyFiles = action === "push" ? getDirtyFilesForPrefix(repoRoot, target.prefix) : [];
     const payload = {
       ok: true,
       dryRun: true,
@@ -243,6 +287,8 @@ export async function runSyncAction(action: "push" | "pull", args: string[]): Pr
       prefix: target.prefix,
       remoteUrl: target.remoteUrl,
       branch: getBranch(target),
+      ...(action === "push" ? { dirty: dirtyFiles.length > 0, dirtyFiles } : {}),
+      ...(commitMessage ? { commitMessage } : {}),
       ...(release.tagName ? { tag: release.tagName } : {}),
       ...(release.releaseVersion ? { releaseVersion: release.releaseVersion } : {}),
     };
@@ -256,6 +302,22 @@ export async function runSyncAction(action: "push" | "pull", args: string[]): Pr
 
   try {
     if (action === "push") {
+      const dirtyFiles = getDirtyFilesForPrefix(repoRoot, target.prefix);
+      if (dirtyFiles.length > 0 && !commitMessage) {
+        throw new Error(
+          [
+            `Refusing to sync '${targetName}' because ${dirtyFiles.length} uncommitted change(s) exist under '${target.prefix}'.`,
+            "Commit them first or rerun with --commit \"<message>\" to auto-commit target changes.",
+            ...dirtyFiles.slice(0, 20).map((file) => `- ${file}`),
+            ...(dirtyFiles.length > 20 ? [`- ...and ${dirtyFiles.length - 20} more`] : []),
+          ].join("\n"),
+        );
+      }
+
+      if (dirtyFiles.length > 0 && commitMessage) {
+        commitTargetPrefixChanges(repoRoot, target.prefix, commitMessage);
+      }
+
       if (target.mode === "snapshot") {
         await pushSnapshot(repoRoot, target, {
           tagName: release.tagName ?? undefined,

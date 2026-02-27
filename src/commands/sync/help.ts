@@ -6,7 +6,7 @@ export function syncHelp(): string {
     "Usage:",
     "  lally sync init --target <name> --prefix <path> --remote <url> [--branch <name>] [--mode snapshot|history]",
     "  lally sync doctor --target <name> [--json]",
-    "  lally sync push --target <name> [--tag <tag-name|alpha>] [--dry-run] [--json]",
+    "  lally sync push --target <name> [--tag <tag-name|alpha>] [--commit <message>] [--dry-run] [--json]",
     "  lally sync pull --target <name> [--dry-run] [--json]",
     "",
     "Config:",
@@ -18,6 +18,7 @@ export function syncHelp(): string {
     "  lally sync push --target statements",
     "  lally sync push --target cli --tag cli-v0.1.0-alpha.2",
     "  lally sync push --target cli --tag alpha",
+    "  lally sync push --target cli --tag alpha --commit \"chore: prep cli release\"",
     "  lally sync pull --target statements --dry-run",
   ].join("\n");
 }
