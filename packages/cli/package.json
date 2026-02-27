@@ -1,6 +1,10 @@
 {
   "name": "@chris-lally/cli",
-  "version": "0.1.0-alpha.24",
+  "version": "0.1.0-alpha.25",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ChrisLally/lally-cli"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
