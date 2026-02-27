@@ -1,6 +1,6 @@
 {
   "name": "@chris-lally/cli",
-  "version": "0.1.0-alpha.18",
+  "version": "0.1.0-alpha.19",
   "private": true,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -14,9 +14,10 @@
     "dist",
     "README.md"
   ],
+  "dependencies": {},
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.json",
-    "check-types": "tsc --noEmit",
+    "build": "pnpm --filter @chris-lally/cli-fumadocs run build && rm -rf dist && tsc -p tsconfig.json",
+    "check-types": "pnpm --filter @chris-lally/cli-fumadocs run build && tsc --noEmit",
     "dev": "ts-node src/bin/lally.ts"
   },
   "devDependencies": {

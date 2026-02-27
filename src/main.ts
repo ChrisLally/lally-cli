@@ -1,6 +1,6 @@
 import { runDbCommand } from "./commands/db/index";
 import { runRepoCommand } from "./commands/repo/index";
-import { runFumadocsCommand } from "./commands/fumadocs/index";
+import { runFumadocsCommand } from "@chris-lally/cli-fumadocs";
 import { runSyncCommand } from "./commands/git/sync/index";
 import { runOpensrcCommand } from "./commands/opensrc/index";
 import { runReleaseCommand } from "./commands/npm/release/index";
