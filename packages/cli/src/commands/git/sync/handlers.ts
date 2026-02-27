@@ -8,6 +8,7 @@ import { syncHelp } from "./help";
 import { pullTarget, pushHistory, pushSnapshot } from "./native";
 import { printJson } from "./output";
 import { getBranch, getSyncSection, resolveTarget } from "./resolve";
+import { runRepoReadmeCommand } from "../../repo/readme";
 
 type SyncRelease = {
   tagName: string | null;
@@ -135,6 +136,27 @@ async function updateLocalPackageVersion(repoRoot: string, target: SyncTarget, v
   const pkg = JSON.parse(await readFile(packageJsonPath, "utf8")) as { version?: string };
   pkg.version = version;
   await writeFile(packageJsonPath, `${JSON.stringify(pkg, null, 2)}\n`, "utf8");
+}
+
+/**
+ * @description Auto-generate repository README for known sync targets before snapshot commit/push.
+ */
+async function maybeGenerateTargetReadme(repoRoot: string, targetName: string, target: SyncTarget): Promise<void> {
+  if (targetName !== "cli") return;
+
+  const targetRoot = resolve(repoRoot, target.prefix);
+  if (!existsSync(targetRoot)) return;
+
+  const originalCwd = process.cwd();
+  try {
+    process.chdir(targetRoot);
+    const code = await runRepoReadmeCommand(["--target", targetName]);
+    if (code !== 0) {
+      throw new Error(`README generation failed for target '${targetName}'`);
+    }
+  } finally {
+    process.chdir(originalCwd);
+  }
 }
 
 /**
@@ -328,6 +350,8 @@ export async function runSyncAction(action: "push" | "pull", args: string[]): Pr
       if (release.releaseVersion) {
         await updateLocalPackageVersion(repoRoot, target, release.releaseVersion);
       }
+
+      await maybeGenerateTargetReadme(repoRoot, targetName, target);
 
       const dirtyFiles = getDirtyFilesForPrefix(repoRoot, target.prefix);
       if (dirtyFiles.length > 0 && !commitMessage) {

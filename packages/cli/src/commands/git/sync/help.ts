@@ -12,6 +12,7 @@ export function syncHelp(): string {
     "Config:",
     "  - requires lally.config.json sync.targets (no legacy fallback)",
     "  - sync push defaults to --tag alpha for snapshot targets",
+    "  - sync push auto-generates README for cli target before commit/export",
     "",
     "Examples:",
     "  lally git sync init --target statements --prefix examples/fide-statements-template --remote https://github.com/chrislally/fide-statements-template.git --mode snapshot",
