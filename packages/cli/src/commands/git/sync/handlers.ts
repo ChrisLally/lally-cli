@@ -76,7 +76,7 @@ function nextAlphaVersion(current: string): string {
  * @description Resolve a package.json with a version for release tagging, supporting monorepo prefixes.
  */
 async function resolveVersionTarget(repoRoot: string, target: SyncTarget): Promise<VersionTarget> {
-  const candidates = [resolve(repoRoot, target.prefix, "package.json"), resolve(repoRoot, target.prefix, "packages/cli/package.json")];
+  const candidates = [resolve(repoRoot, target.prefix, "packages/cli/package.json"), resolve(repoRoot, target.prefix, "package.json")];
 
   for (const packageJsonPath of candidates) {
     if (!existsSync(packageJsonPath)) continue;
@@ -99,7 +99,18 @@ async function resolveReleaseFromTagInput(
   tagInput: string | null,
 ): Promise<SyncRelease> {
   if (!tagInput) return { tagName: null, releaseVersion: null };
-  if (tagInput !== "alpha") return { tagName: tagInput, releaseVersion: null };
+  if (tagInput !== "alpha") {
+    if (target.mode === "snapshot") {
+      const explicitPrefix = `${targetName}-v`;
+      if (tagInput.startsWith(explicitPrefix)) {
+        const explicitVersion = tagInput.slice(explicitPrefix.length).trim();
+        if (explicitVersion.length > 0) {
+          return { tagName: tagInput, releaseVersion: explicitVersion };
+        }
+      }
+    }
+    return { tagName: tagInput, releaseVersion: null };
+  }
 
   if (target.mode !== "snapshot") {
     throw new Error("--tag alpha requires snapshot mode");
