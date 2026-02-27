@@ -1,6 +1,6 @@
 {
   "name": "lally-cli",
-  "version": "0.1.0-alpha.34",
+  "version": "0.0.0",
   "private": true,
   "scripts": {
     "build": "turbo run build",

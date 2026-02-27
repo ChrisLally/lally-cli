@@ -80,7 +80,11 @@ function nextAlphaVersion(current: string): string {
  * @description Resolve a package.json with a version for release tagging, supporting monorepo prefixes.
  */
 async function resolveVersionTarget(repoRoot: string, target: SyncTarget): Promise<VersionTarget> {
-  const candidates = [resolve(repoRoot, target.prefix, "packages/cli/package.json"), resolve(repoRoot, target.prefix, "package.json")];
+  const candidates = [
+    ...(target.versionPath ? [resolve(repoRoot, target.prefix, target.versionPath)] : []),
+    resolve(repoRoot, target.prefix, "packages/cli/package.json"),
+    resolve(repoRoot, target.prefix, "package.json"),
+  ];
 
   for (const packageJsonPath of candidates) {
     if (!existsSync(packageJsonPath)) continue;

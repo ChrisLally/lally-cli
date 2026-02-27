@@ -106,11 +106,13 @@ export async function pushSnapshot(
     await normalizeStandalonePackage(cloneDir, target.remoteUrl);
 
     if (releaseVersion) {
+      const packageJsonRelativePath = target.versionPath ?? "package.json";
+      const packageJsonPath = resolve(cloneDir, packageJsonRelativePath);
       const setVersion = runCommand(
         "node",
         [
           "-e",
-          `const fs=require('fs');const p='${cloneDir.replaceAll("'", "'\\''")}/package.json';const v='${releaseVersion}';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.version=v;fs.writeFileSync(p,JSON.stringify(j,null,2)+'\\n');`,
+          `const fs=require('fs');const p='${packageJsonPath.replaceAll("'", "'\\''")}';const v='${releaseVersion}';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.version=v;fs.writeFileSync(p,JSON.stringify(j,null,2)+'\\n');`,
         ],
         repoRoot,
       );

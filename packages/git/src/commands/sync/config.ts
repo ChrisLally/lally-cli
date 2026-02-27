@@ -7,6 +7,7 @@ export type SyncTarget = {
   remoteUrl: string;
   branch?: string;
   mode: "snapshot" | "history";
+  versionPath?: string;
 };
 
 export type LallyConfig = {
