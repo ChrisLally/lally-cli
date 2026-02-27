@@ -160,11 +160,17 @@ CLI for \`${params.packageName}\`.
 
 ## Install
 
+### Prerequisites
+
+- Node.js 20+
+- npm 10+ (or pnpm/yarn/bun)
+- git (for sync workflows)
+
 \`\`\`bash
 pnpm add -D ${params.packageName}
 \`\`\`
 
-or run with \`pnpm dlx\`:
+or run without install:
 
 \`\`\`bash
 pnpm dlx ${params.packageName}@alpha --help

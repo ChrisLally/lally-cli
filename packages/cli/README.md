@@ -6,11 +6,17 @@ CLI for `@chris-lally/cli`.
 
 ## Install
 
+### Prerequisites
+
+- Node.js 20+
+- npm 10+ (or pnpm/yarn/bun)
+- git (for sync workflows)
+
 ```bash
 pnpm add -D @chris-lally/cli
 ```
 
-or run with `pnpm dlx`:
+or run without install:
 
 ```bash
 pnpm dlx @chris-lally/cli@alpha --help

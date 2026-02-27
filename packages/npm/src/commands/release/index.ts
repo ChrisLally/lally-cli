@@ -5,6 +5,7 @@ import { cleanupTempNpmrc, resolveNpmAuth } from "./auth";
 import { getStringFlag, hasFlag, parseArgs, parseTarget, printJson, releaseHelp } from "./args";
 import { findRepoRoot, loadRootEnv } from "./env";
 import { runOrThrow } from "./exec";
+import { formatRunScriptCommand, resolvePackageManager, runPackageScript } from "./package-manager";
 import { PackageJson, ReleaseTarget } from "./types";
 import { nextTaggedVersion } from "./version";
 
@@ -37,6 +38,7 @@ export async function runReleaseCommand(command: string | undefined, args: strin
 
   const repoRoot = findRepoRoot(process.cwd());
   await loadRootEnv(repoRoot);
+  const packageManager = resolvePackageManager(repoRoot);
 
   const packageDir = resolveTargetDir(repoRoot, target);
   const packageJsonPath = resolve(packageDir, "package.json");
@@ -71,9 +73,9 @@ export async function runReleaseCommand(command: string | undefined, args: strin
       tag,
       commands: [
         target === "cli" ? "lally repo readme --target cli" : null,
-        `pnpm -C ${packageDir} run build`,
-        packageJson.scripts?.["check-types"] ? `pnpm -C ${packageDir} run check-types` : null,
-        packageJson.scripts?.["test"] ? `pnpm -C ${packageDir} run test` : null,
+        formatRunScriptCommand(packageManager, "build", packageDir),
+        packageJson.scripts?.["check-types"] ? formatRunScriptCommand(packageManager, "check-types", packageDir) : null,
+        packageJson.scripts?.["test"] ? formatRunScriptCommand(packageManager, "test", packageDir) : null,
         `npm publish --tag ${tag} --access public`,
       ].filter(Boolean),
     };
@@ -105,12 +107,12 @@ export async function runReleaseCommand(command: string | undefined, args: strin
       await runRepoReadmeCommand(["--target", "cli"]);
     }
 
-    runOrThrow("pnpm", ["-C", packageDir, "run", "build"], repoRoot, auth.commandEnv);
+    runPackageScript(packageManager, "build", packageDir, repoRoot, auth.commandEnv);
     if (packageJson.scripts?.["check-types"]) {
-      runOrThrow("pnpm", ["-C", packageDir, "run", "check-types"], repoRoot, auth.commandEnv);
+      runPackageScript(packageManager, "check-types", packageDir, repoRoot, auth.commandEnv);
     }
     if (packageJson.scripts?.["test"]) {
-      runOrThrow("pnpm", ["-C", packageDir, "run", "test"], repoRoot, auth.commandEnv);
+      runPackageScript(packageManager, "test", packageDir, repoRoot, auth.commandEnv);
     }
 
     if (!process.env.NPM_TOKEN) {

@@ -49,8 +49,8 @@ echo "Ensured database exists: $DB_NAME"
       "dotenv -e .env -- sh -c 'psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f db/migrations/tables.sql'";
     scripts["db:reset:local"] =
       scripts["db:reset:local"] ??
-      "dotenv -e .env -- sh -c 'psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -c \"DROP SCHEMA public CASCADE; CREATE SCHEMA public;\"' && pnpm run db:migrate:local";
-    scripts["db:setup:local"] = scripts["db:setup:local"] ?? "pnpm run db:create:local && pnpm run db:migrate:local";
+      "dotenv -e .env -- sh -c 'psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -c \"DROP SCHEMA public CASCADE; CREATE SCHEMA public;\"' && npm run db:migrate:local";
+    scripts["db:setup:local"] = scripts["db:setup:local"] ?? "npm run db:create:local && npm run db:migrate:local";
 
     packageJson.scripts = scripts;
 
@@ -110,7 +110,7 @@ echo "Seed complete"
     const scripts = (packageJson.scripts as Record<string, string> | undefined) ?? {};
     scripts["db:seed:local"] = scripts["db:seed:local"] ?? "dotenv -e .env -- bash ./db/scripts/seed-local.sh";
     scripts["db:setup-and-seed:local"] =
-      scripts["db:setup-and-seed:local"] ?? "pnpm run db:setup:local && pnpm run db:seed:local";
+      scripts["db:setup-and-seed:local"] ?? "npm run db:setup:local && npm run db:seed:local";
     packageJson.scripts = scripts;
 
     const devDependencies = (packageJson.devDependencies as Record<string, string> | undefined) ?? {};
