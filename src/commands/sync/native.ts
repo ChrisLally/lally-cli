@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { SyncTarget } from "./config";
@@ -17,6 +17,44 @@ function assertTagMissingOnRemote(repoRoot: string, remoteUrl: string, tagName: 
 
   if (check.stdout.trim().length > 0) {
     throw new Error(`tag already exists on remote: ${tagName}`);
+  }
+}
+
+async function normalizeStandalonePackage(repoDir: string): Promise<void> {
+  const packageJsonPath = resolve(repoDir, "package.json");
+  if (!existsSync(packageJsonPath)) return;
+
+  const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as Record<string, unknown>;
+  const sections = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"] as const;
+
+  for (const section of sections) {
+    const current = packageJson[section];
+    if (!current || typeof current !== "object") continue;
+    const entries = Object.entries(current as Record<string, string>).filter(([, value]) => !value.startsWith("workspace:"));
+    packageJson[section] = Object.fromEntries(entries);
+  }
+
+  await writeFile(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
+
+  const tsconfigPath = resolve(repoDir, "tsconfig.json");
+  if (existsSync(tsconfigPath)) {
+    const tsconfig = JSON.parse(await readFile(tsconfigPath, "utf8")) as Record<string, unknown>;
+    if (typeof tsconfig.extends === "string" && tsconfig.extends.startsWith("@repo/")) {
+      delete tsconfig.extends;
+      await writeFile(tsconfigPath, `${JSON.stringify(tsconfig, null, 2)}\n`, "utf8");
+    }
+  }
+
+  const eslintConfigPath = resolve(repoDir, "eslint.config.mjs");
+  if (existsSync(eslintConfigPath)) {
+    const eslintContent = await readFile(eslintConfigPath, "utf8");
+    if (eslintContent.includes("@repo/eslint-config")) {
+      await writeFile(
+        eslintConfigPath,
+        `/** @description Standalone eslint config for published package repo. */\nexport default [];\n`,
+        "utf8",
+      );
+    }
   }
 }
 
@@ -59,6 +97,7 @@ export async function pushSnapshot(
     }
 
     ensureOk(runCommand("bash", ["-lc", `rsync -a --delete --exclude ".git/" "${exportedPrefix}/" "${cloneDir}/"`], repoRoot), "rsync snapshot");
+    await normalizeStandalonePackage(cloneDir);
 
     if (releaseVersion) {
       const setVersion = runCommand(
