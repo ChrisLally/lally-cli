@@ -16,9 +16,6 @@ function initHelp(): string {
     "Presets:",
     "  fumadocs/base-path   Initialize content root + Next basePath from lally.config.json",
     "",
-    "Deprecated aliases:",
-    "  fumadocs/dashboard   Alias for fumadocs/base-path",
-    "",
     "Examples:",
     "  lally init --app apps/web",
     "  lally init fumadocs/base-path --app apps/web",
@@ -68,12 +65,6 @@ export async function runInitCommand(args: string[]) {
 
   try {
     if (preset === "fumadocs/base-path") {
-      await initFumadocsBasePath(appRoot);
-      return;
-    }
-
-    if (preset === "fumadocs/dashboard") {
-      console.warn("`fumadocs/dashboard` is deprecated. Use `fumadocs/base-path`.");
       await initFumadocsBasePath(appRoot);
       return;
     }

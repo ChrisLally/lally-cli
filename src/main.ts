@@ -116,14 +116,6 @@ export async function runCli(argv: string[]) {
     return;
   }
 
-  if (command === "project") {
-    console.warn("`lally project` is deprecated. Use `lally update`.");
-    const [subcommand, ...updateArgs] = rest;
-    const code = await runUpdateCommand(subcommand, updateArgs);
-    if (code !== 0) process.exitCode = code;
-    return;
-  }
-
   console.error(`Unknown command: ${command}`);
   console.log("");
   printHelp();
