@@ -20,12 +20,13 @@ function assertTagMissingOnRemote(repoRoot: string, remoteUrl: string, tagName: 
   }
 }
 
-async function normalizeStandalonePackage(repoDir: string): Promise<void> {
+async function normalizeStandalonePackage(repoDir: string, remoteUrl: string): Promise<void> {
   const packageJsonPath = resolve(repoDir, "package.json");
   if (!existsSync(packageJsonPath)) return;
 
   const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as Record<string, unknown>;
   const sections = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"] as const;
+  const normalizedRemote = remoteUrl.replace(/\.git$/, "");
 
   for (const section of sections) {
     const current = packageJson[section];
@@ -33,6 +34,11 @@ async function normalizeStandalonePackage(repoDir: string): Promise<void> {
     const entries = Object.entries(current as Record<string, string>).filter(([, value]) => !value.startsWith("workspace:"));
     packageJson[section] = Object.fromEntries(entries);
   }
+
+  packageJson.repository = {
+    type: "git",
+    url: normalizedRemote,
+  };
 
   await writeFile(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
 
@@ -97,7 +103,7 @@ export async function pushSnapshot(
     }
 
     ensureOk(runCommand("bash", ["-lc", `rsync -a --delete --exclude ".git/" "${exportedPrefix}/" "${cloneDir}/"`], repoRoot), "rsync snapshot");
-    await normalizeStandalonePackage(cloneDir);
+    await normalizeStandalonePackage(cloneDir, target.remoteUrl);
 
     if (releaseVersion) {
       const setVersion = runCommand(
