@@ -21,9 +21,14 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.release_meta.outputs.tag_name }}
+      dist_tag: ${{ steps.dist_tag.outputs.tag }}
+      prerelease: ${{ steps.release_meta.outputs.prerelease }}
     permissions:
-      contents: read
+      contents: write
       id-token: write
+      deployments: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -80,6 +85,20 @@ jobs:
           esac
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve release metadata
+        id: release_meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${{ steps.meta.outputs.version }}"
+          if [[ "$VERSION" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "tag_name=$TAG" >> "$GITHUB_OUTPUT"
+
       - name: Resolve npm dist-tag
         id: dist_tag
         shell: bash
@@ -126,3 +145,20 @@ jobs:
 
       - name: Publish package
         run: npm publish --provenance --access public --tag ${{ steps.dist_tag.outputs.tag }}
+
+  release:
+    needs: publish
+    runs-on: ubuntu-latest
+    environment:
+      name: npm-${{ needs.publish.outputs.dist_tag }}
+    permissions:
+      contents: write
+      deployments: write
+    steps:
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.publish.outputs.tag_name }}
+          name: ${{ needs.publish.outputs.tag_name }}
+          prerelease: ${{ needs.publish.outputs.prerelease }}
+          generate_release_notes: true
