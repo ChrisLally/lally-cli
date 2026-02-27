@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
-import fs from "node:fs/promises";
-import path, { resolve } from "node:path";
+import * as fs from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 
 export type ParsedInitArgs = {
   preset: string | undefined;
@@ -106,13 +106,13 @@ export function toTitleCase(segment: string): string {
 
 export async function ensureFile(filePath: string, content: string): Promise<"created" | "skipped"> {
   if (existsSync(filePath)) return "skipped";
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.mkdir(dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, content, "utf8");
   return "created";
 }
 
 export async function createBaseConfig(cwd: string) {
-  const lallyConfigPath = path.join(cwd, "lally.config.json");
+  const lallyConfigPath = join(cwd, "lally.config.json");
 
   const config: LallyConfig & Record<string, unknown> = {
     schema: "https://christopherlally.com/schemas/config.json",

@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import fs from "node:fs/promises";
+import * as fs from "node:fs/promises";
 import { resolve } from "node:path";
 import { syncFumadocsLayoutShared } from "../../fumadocs/layout-shared";
 import { createBaseConfig, ensureFile, getFumadocsSettings, toTitleCase } from "../shared";
