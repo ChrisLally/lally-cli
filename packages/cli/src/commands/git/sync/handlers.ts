@@ -325,6 +325,10 @@ export async function runSyncAction(action: "push" | "pull", args: string[]): Pr
 
   try {
     if (action === "push") {
+      if (release.releaseVersion) {
+        await updateLocalPackageVersion(repoRoot, target, release.releaseVersion);
+      }
+
       const dirtyFiles = getDirtyFilesForPrefix(repoRoot, target.prefix);
       if (dirtyFiles.length > 0 && !commitMessage) {
         throw new Error(
@@ -348,10 +352,6 @@ export async function runSyncAction(action: "push" | "pull", args: string[]): Pr
         });
       } else {
         pushHistory(repoRoot, targetName, target, { tagName: release.tagName ?? undefined });
-      }
-
-      if (release.releaseVersion) {
-        await updateLocalPackageVersion(repoRoot, target, release.releaseVersion);
       }
     } else {
       pullTarget(repoRoot, target);

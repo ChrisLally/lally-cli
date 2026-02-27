@@ -1,6 +1,6 @@
 {
   "name": "@chris-lally/cli",
-  "version": "0.1.0-alpha.19",
+  "version": "0.1.0-alpha.23",
   "private": true,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
