@@ -1,0 +1,164 @@
+name: Release Publish
+
+on:
+  workflow_call:
+    inputs:
+      tag_prefix:
+        description: "Tag prefix used to derive package version"
+        required: true
+        type: string
+      node_version:
+        description: "Node.js version"
+        required: false
+        default: "24"
+        type: string
+      install_args:
+        description: "Additional pnpm install arguments"
+        required: false
+        default: "--no-frozen-lockfile"
+        type: string
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.release_meta.outputs.tag_name }}
+      dist_tag: ${{ steps.dist_tag.outputs.tag }}
+      prerelease: ${{ steps.release_meta.outputs.prerelease }}
+    permissions:
+      contents: write
+      id-token: write
+      deployments: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PNPM
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Verify npm version for trusted publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NPM_VERSION="$(npm --version)"
+          echo "$NPM_VERSION"
+          node -e '
+            const version = process.env.NPM_VERSION;
+            if (!version) {
+              console.error("npm version is unavailable in environment");
+              process.exit(1);
+            }
+            const [major, minor, patch] = version.split(".").map(Number);
+            const ok = major > 11 || (major === 11 && (minor > 5 || (minor === 5 && patch >= 1)));
+            if (!ok) {
+              console.error(`npm ${version} is too old for trusted publishing (need >= 11.5.1)`);
+              process.exit(1);
+            }
+          '
+
+      - name: Install dependencies
+        shell: bash
+        run: pnpm install ${{ inputs.install_args }}
+
+      - name: Resolve package from tag
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          PREFIX="${{ inputs.tag_prefix }}"
+          case "$TAG" in
+            "$PREFIX"*)
+              VERSION="${TAG#"$PREFIX"}"
+              ;;
+            *)
+              echo "Unsupported tag format: $TAG (expected prefix: $PREFIX)"
+              exit 1
+              ;;
+          esac
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve release metadata
+        id: release_meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${{ steps.meta.outputs.version }}"
+          if [[ "$VERSION" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "tag_name=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve npm dist-tag
+        id: dist_tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.meta.outputs.version }}"
+          if [[ "$VERSION" == *-* ]]; then
+            PRERELEASE="${VERSION#*-}"
+            CHANNEL="${PRERELEASE%%.*}"
+          else
+            CHANNEL="latest"
+          fi
+          echo "tag=$CHANNEL" >> "$GITHUB_OUTPUT"
+
+      - name: Validate package version matches tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          PKG_VERSION="$(node -e "console.log(require('./package.json').version)")"
+          TAG_VERSION="${{ steps.meta.outputs.version }}"
+          if [[ "$PKG_VERSION" != "$TAG_VERSION" ]]; then
+            echo "Version mismatch: package.json=$PKG_VERSION tag=$TAG_VERSION"
+            exit 1
+          fi
+
+      - name: Build package
+        run: pnpm run build
+
+      - name: Check types
+        run: pnpm run check-types
+
+      - name: Ensure tokenless trusted publishing
+        shell: bash
+        run: |
+          unset NODE_AUTH_TOKEN NPM_TOKEN
+          npm config delete //registry.npmjs.org/:_authToken || true
+
+      - name: Verify OIDC for npm trusted publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || { echo "Missing ACTIONS_ID_TOKEN_REQUEST_URL"; exit 1; }
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" || { echo "Missing ACTIONS_ID_TOKEN_REQUEST_TOKEN"; exit 1; }
+
+      - name: Publish package
+        run: npm publish --provenance --access public --tag ${{ steps.dist_tag.outputs.tag }}
+
+  release:
+    needs: publish
+    runs-on: ubuntu-latest
+    environment:
+      name: npm-${{ needs.publish.outputs.dist_tag }}
+    permissions:
+      contents: write
+      deployments: write
+    steps:
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.publish.outputs.tag_name }}
+          name: ${{ needs.publish.outputs.tag_name }}
+          prerelease: ${{ needs.publish.outputs.prerelease }}
+          generate_release_notes: true
