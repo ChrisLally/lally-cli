@@ -22,6 +22,11 @@ on:
         required: false
         default: "packages/cli"
         type: string
+      deployment_environment:
+        description: "GitHub deployment environment name"
+        required: false
+        default: "Preview"
+        type: string
 
 jobs:
   publish:
@@ -156,7 +161,7 @@ jobs:
     needs: publish
     runs-on: ubuntu-latest
     environment:
-      name: npm-${{ needs.publish.outputs.dist_tag }}
+      name: ${{ inputs.deployment_environment }}
     permissions:
       contents: write
       deployments: write
