@@ -1,11 +1,7 @@
 {
   "name": "@chris-lally/cli",
-  "version": "0.1.0-alpha.17",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/ChrisLally/lally-cli"
-  },
+  "version": "0.0.0-alpha.1",
+  "private": true,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -18,20 +14,18 @@
     "dist",
     "README.md"
   ],
-  "publishConfig": {
-    "access": "public"
-  },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "check-types": "tsc --noEmit",
-    "dev": "ts-node src/bin/lally.ts",
-    "prepublishOnly": "pnpm run build"
+    "dev": "ts-node src/bin/lally.ts"
   },
-  "dependencies": {},
   "devDependencies": {
     "@types/node": "^22.15.3",
-    "eslint": "^9.39.1",
     "ts-node": "^10.9.2",
     "typescript": "5.9.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ChrisLally/lally-cli"
   }
 }

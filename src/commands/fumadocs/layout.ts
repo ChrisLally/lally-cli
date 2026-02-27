@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { syncFumadocsLayoutShared } from "../../fumadocs/layout-shared";
+import { syncFumadocsLayoutShared } from "./layout-shared";
 
 type FumadocsConfig = {
   basePath?: string;
@@ -142,7 +142,7 @@ async function alignNotebookPageImport(appRoot: string, contentRoot: string): Pr
   return null;
 }
 
-export async function runUpdateLayoutCommand(args: string[]): Promise<number> {
+export async function runFumadocsLayoutCommand(args: string[]): Promise<number> {
   const flags = parseFlags(args);
   const preset = getStringFlag(flags, "preset");
 

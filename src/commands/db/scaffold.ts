@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { ensureFile, ensureJsonFile, loadJson } from "./shared";
+import { ensureFile, ensureJsonFile, loadJson } from "../app";
 
 export async function addDbLocalPostgres(appRoot: string) {
   const createScriptPath = resolve(appRoot, "db/scripts/create-local-db.sh");

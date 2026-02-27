@@ -7,7 +7,7 @@ import {
   getFumadocsSettings,
   loadJson,
   toTitleCase,
-} from "./shared";
+} from "../app";
 
 export async function addFumadocsSection(appRoot: string, sectionName: string) {
   const sectionSlug = sectionName.trim().toLowerCase().replace(/\s+/g, "-");

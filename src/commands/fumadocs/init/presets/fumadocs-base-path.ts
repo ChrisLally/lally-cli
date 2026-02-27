@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import { resolve } from "node:path";
-import { syncFumadocsLayoutShared } from "../../fumadocs/layout-shared";
+import { syncFumadocsLayoutShared } from "../../layout-shared";
 import { createBaseConfig, ensureFile, getFumadocsSettings, toTitleCase } from "../shared";
 
 export async function initFumadocsBasePath(appRoot: string) {
@@ -40,5 +40,5 @@ export async function initFumadocsBasePath(appRoot: string) {
   }
 
   console.log(`Initialized fumadocs/base-path baseline (basePath: ${basePath}, contentRoot: ${contentRoot}).`);
-  console.log("Next: use `lally add fumadocs/section --name <name>` to add sections.");
+  console.log("Next: use `lally fumadocs section --name <name>` to add sections.");
 }

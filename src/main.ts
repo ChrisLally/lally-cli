@@ -1,10 +1,9 @@
-import { runAddCommand } from "./commands/add/index";
-import { runCheckCommand } from "./commands/check/index";
-import { runCleanCommand } from "./commands/clean/index";
-import { runInitCommand } from "./commands/init/index";
-import { runReleaseCommand } from "./commands/release/index";
-import { runSyncCommand } from "./commands/sync/index";
-import { runUpdateCommand } from "./commands/update/index";
+import { runDbCommand } from "./commands/db/index";
+import { runRepoCommand } from "./commands/repo/index";
+import { runFumadocsCommand } from "./commands/fumadocs/index";
+import { runSyncCommand } from "./commands/git/sync/index";
+import { runOpensrcCommand } from "./commands/opensrc/index";
+import { runReleaseCommand } from "./commands/npm/release/index";
 
 type CliArgs = {
   command: string | undefined;
@@ -20,49 +19,67 @@ function printHelp() {
   console.log("lally");
   console.log("");
   console.log("Usage:");
-  console.log("  lally <command> [options]");
+  console.log("  lally <domain> <command> [options]");
   console.log("");
-  console.log("Commands:");
-  console.log("  init      Initialize app config/presets");
-  console.log("  add       Add scaffolds (fumadocs, db)");
-  console.log("  check     Validate project setup (read-only)");
-  console.log("  clean     Clean template leftovers (safe dry-run default)");
-  console.log("  sync      Sync package/app slices to public repos");
-  console.log("  update    Run maintenance/update utilities");
-  console.log("  release   Publish @chris-lally packages");
+  console.log("Domains:");
+  console.log("  opensrc   Fetch/list/remove source context via opensrc");
+  console.log("  fumadocs  Fumadocs init/scaffold/check/clean/layout commands");
+  console.log("  db        Database scaffolding commands");
+  console.log("  repo      Repository maintenance commands");
+  console.log("  git       Git-oriented sync workflows");
+  console.log("  npm       npm release workflows");
   console.log("");
-  console.log("Command usage:");
-  console.log("  lally init [fumadocs/base-path] [--app <path>]");
-  console.log("  lally add <namespace/item> [--app <path>]");
-  console.log("  lally check fumadocs [--app <path>] [--strict-layout] [--json]");
-  console.log("  lally clean fumadocs [--app <path>] [--keep <glob>] [--apply] [--delete]");
-  console.log("  lally sync <init|doctor|push|pull> [options]");
-  console.log("  lally update subtree --script <script-name> [--dir <path>] [--json]");
-  console.log("  lally update layout --preset notebook-topnav [--app <path>]");
-  console.log("  lally update readme --target <name> [--check]");
-  console.log("  lally release <target> --tag <tag> [--dry-run] [--json]");
+  console.log("Domain usage:");
+  console.log("  lally opensrc <fetch|list|remove> [...args]");
+  console.log("  lally fumadocs <init|section|page-shell|sidebar-history|check|clean|layout> [options]");
+  console.log("  lally db <local-postgres|master-migration|seed-script> [options]");
+  console.log("  lally repo <readme> [options]");
+  console.log("  lally git sync <init|doctor|push|pull> [options]");
+  console.log("  lally npm release <target> --tag <tag> [--dry-run] [--json]");
   console.log("");
   console.log("Examples:");
-  console.log("  lally init fumadocs/base-path --app apps/web");
-  console.log("  lally add fumadocs/sidebar-history");
-  console.log("  lally add fumadocs/section --name handbook --app apps/web");
-  console.log("  lally check fumadocs --app apps/web");
-  console.log("  lally check fumadocs --app apps/web --strict-layout");
-  console.log("  lally clean fumadocs --app apps/web");
-  console.log("  lally clean fumadocs --app apps/web --apply");
-  console.log("  lally add db/local-postgres --app apps/web");
-  console.log("  lally sync doctor --target statements");
-  console.log("  lally sync push --target statements");
-  console.log("  lally update subtree --script sync-push.sh");
-  console.log("  lally update subtree --target statements --action push");
-  console.log("  lally update layout --preset notebook-topnav --app apps/web");
-  console.log("  lally update readme --target cli");
-  console.log("  lally release fumadocs --tag alpha --dry-run");
-  console.log("");
-  console.log("Notes:");
-  console.log("  - Use --app when running from monorepo root.");
-  console.log("  - `clean` is dry-run by default; add --apply to execute.");
-  console.log("  - For detailed help: lally <command> --help");
+  console.log("  lally opensrc fetch zod github:shadcn-ui/ui --modify=false");
+  console.log("  lally opensrc list");
+  console.log("  lally opensrc remove zod");
+  console.log("  lally fumadocs init --app apps/web");
+  console.log("  lally fumadocs section --name handbook --app apps/web");
+  console.log("  lally db local-postgres --app apps/web");
+  console.log("  lally repo readme --target cli");
+  console.log("  lally git sync doctor --target statements");
+  console.log("  lally npm release cli --tag alpha --dry-run");
+}
+
+async function runOpenSrcDomain(args: string[]): Promise<number> {
+  const [subcommand, ...rest] = args;
+
+  if (!subcommand || subcommand === "--help" || subcommand === "-h" || subcommand === "help") {
+    console.log("Usage: lally opensrc <fetch|list|remove> [...args]");
+    return 0;
+  }
+
+  try {
+    if (subcommand === "fetch") {
+      runOpensrcCommand(rest, undefined);
+      return 0;
+    }
+
+    if (subcommand === "list") {
+      runOpensrcCommand(["list"], undefined);
+      return 0;
+    }
+
+    if (subcommand === "remove") {
+      runOpensrcCommand(["remove", ...rest], undefined);
+      return 0;
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message);
+    return 1;
+  }
+
+  console.error(`Unknown opensrc command: ${subcommand}`);
+  return 1;
 }
 
 export async function runCli(argv: string[]) {
@@ -73,46 +90,53 @@ export async function runCli(argv: string[]) {
     return;
   }
 
-  if (command === "init") {
-    await runInitCommand(rest);
-    return;
-  }
-
-  if (command === "add") {
-    await runAddCommand(rest);
-    return;
-  }
-
-  if (command === "check") {
-    const code = await runCheckCommand(rest);
+  if (command === "opensrc") {
+    const code = await runOpenSrcDomain(rest);
     if (code !== 0) process.exitCode = code;
     return;
   }
 
-  if (command === "clean") {
-    const code = await runCleanCommand(rest);
+  if (command === "fumadocs") {
+    const code = await runFumadocsCommand(rest);
     if (code !== 0) process.exitCode = code;
     return;
   }
 
-  if (command === "release") {
-    const [target, ...releaseArgs] = rest;
-    const code = await runReleaseCommand(target, releaseArgs);
+  if (command === "db") {
+    const code = await runDbCommand(rest);
     if (code !== 0) process.exitCode = code;
     return;
   }
 
-  if (command === "sync") {
-    const [subcommand, ...syncArgs] = rest;
-    const code = await runSyncCommand(subcommand, syncArgs);
+  if (command === "repo") {
+    const code = await runRepoCommand(rest);
     if (code !== 0) process.exitCode = code;
     return;
   }
 
-  if (command === "update") {
-    const [subcommand, ...updateArgs] = rest;
-    const code = await runUpdateCommand(subcommand, updateArgs);
-    if (code !== 0) process.exitCode = code;
+  if (command === "git") {
+    const [subcommand, ...gitArgs] = rest;
+    if (subcommand === "sync") {
+      const [syncCommand, ...syncArgs] = gitArgs;
+      const code = await runSyncCommand(syncCommand, syncArgs);
+      if (code !== 0) process.exitCode = code;
+      return;
+    }
+    console.error(`Unknown git command: ${subcommand ?? "(missing)"}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (command === "npm") {
+    const [subcommand, ...npmArgs] = rest;
+    if (subcommand === "release") {
+      const [target, ...releaseArgs] = npmArgs;
+      const code = await runReleaseCommand(target, releaseArgs);
+      if (code !== 0) process.exitCode = code;
+      return;
+    }
+    console.error(`Unknown npm command: ${subcommand ?? "(missing)"}`);
+    process.exitCode = 1;
     return;
   }
 

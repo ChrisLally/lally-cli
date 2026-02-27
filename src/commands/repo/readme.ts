@@ -2,9 +2,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
-import { getStringFlag, hasFlag, parseArgs } from "../args";
-import { loadConfig, ReadmeTargetConfig } from "../config";
-import { findRepoRoot } from "../repo";
+import { getStringFlag, hasFlag, parseArgs } from "../git/subtree-args";
+import { loadConfig, ReadmeTargetConfig } from "./config";
+import { findRepoRoot } from "../git/repo";
 
 type ResolvedReadmeTarget = {
   targetName: string;
@@ -179,7 +179,7 @@ MIT. See \`LICENSE\`.
 `;
 }
 
-export async function runUpdateReadmeCommand(args: string[]): Promise<number> {
+export async function runRepoReadmeCommand(args: string[]): Promise<number> {
   const { flags } = parseArgs(["readme", ...args]);
   const targetFromFlag = getStringFlag(flags, "target");
   const positional = args.find((arg) => !arg.startsWith("--"));
@@ -216,7 +216,7 @@ export async function runUpdateReadmeCommand(args: string[]): Promise<number> {
     sections.push({ heading: `${resolved.binCommand} ${trimmed} --help`, content: help });
   }
 
-  const generatorCommand = `lally update readme --target ${resolved.targetName}`;
+  const generatorCommand = `lally repo readme --target ${resolved.targetName}`;
   const content = buildReadme({ packageName, generatorCommand, sections });
 
   const check = hasFlag(flags, "check");
@@ -229,7 +229,7 @@ export async function runUpdateReadmeCommand(args: string[]): Promise<number> {
       return 0;
     }
     console.error(`README is out of date: ${resolved.outputPath}`);
-    console.error(`Run: lally update readme --target ${resolved.targetName}`);
+    console.error(`Run: lally repo readme --target ${resolved.targetName}`);
     return 1;
   }
 

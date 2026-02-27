@@ -1,9 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
-import { getStringFlag, hasFlag, parseArgs } from "./args";
-import { loadConfig, LallyConfig } from "./config";
-import { updateHelp } from "./help";
-import { printJson } from "./output";
+import { getStringFlag, hasFlag, parseArgs } from "./subtree-args";
+import { loadConfig, LallyConfig } from "../repo/config";
+import { printJson } from "./subtree-output";
 import { findRepoRoot } from "./repo";
 
 function resolveScriptFromTarget(
@@ -33,7 +32,7 @@ function runScript(scriptPath: string, repoRoot: string) {
   });
 }
 
-export async function runUpdateSubtreeCommand(args: string[]): Promise<number> {
+export async function runGitSubtreeCommand(args: string[]): Promise<number> {
   const { flags } = parseArgs(["subtree", ...args]);
   const json = hasFlag(flags, "json");
   const scriptFlag = getStringFlag(flags, "script");
@@ -50,7 +49,7 @@ export async function runUpdateSubtreeCommand(args: string[]): Promise<number> {
   if (!chosenScript) {
     console.error("Missing subtree script.");
     console.error("Provide --script, or configure target mapping in lally.config.json and use --target [--action].");
-    console.error(updateHelp());
+    console.error("Usage: lally git subtree --target <name> --action <push|pull> [--dir <path>] [--json]");
     return 1;
   }
 

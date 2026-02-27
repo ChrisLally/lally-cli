@@ -3,15 +3,15 @@ import { ParsedArgs, ReleaseTarget } from "./types";
 export function releaseHelp(): string {
   return [
     "Usage:",
-    "  lally release <target> --tag <tag> [--dry-run] [--json]",
+    "  lally npm release <target> --tag <tag> [--dry-run] [--json]",
     "",
     "Targets:",
     "  fumadocs   Publish @chris-lally/fumadocs",
     "  cli        Publish @chris-lally/cli",
     "",
     "Examples:",
-    "  lally release fumadocs --tag alpha --dry-run",
-    "  lally release fumadocs --tag alpha --json",
+    "  lally npm release fumadocs --tag alpha --dry-run",
+    "  lally npm release fumadocs --tag alpha --json",
     "",
     "Notes:",
     "  - For target=cli, README is regenerated automatically before build.",

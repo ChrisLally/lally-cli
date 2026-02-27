@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { runUpdateReadmeCommand } from "../update/docs/readme";
+import { runRepoReadmeCommand } from "../../repo/readme";
 import { cleanupTempNpmrc, resolveNpmAuth } from "./auth";
 import { getStringFlag, hasFlag, parseArgs, parseTarget, printJson, releaseHelp } from "./args";
 import { findRepoRoot, loadRootEnv } from "./env";
@@ -70,7 +70,7 @@ export async function runReleaseCommand(command: string | undefined, args: strin
       nextSpec,
       tag,
       commands: [
-        target === "cli" ? "lally update readme --target cli" : null,
+        target === "cli" ? "lally repo readme --target cli" : null,
         `pnpm -C ${packageDir} run build`,
         packageJson.scripts?.["check-types"] ? `pnpm -C ${packageDir} run check-types` : null,
         packageJson.scripts?.["test"] ? `pnpm -C ${packageDir} run test` : null,
@@ -102,7 +102,7 @@ export async function runReleaseCommand(command: string | undefined, args: strin
     await writeFile(packageJsonPath, `${JSON.stringify(nextPackageJson, null, 2)}\n`, "utf8");
 
     if (target === "cli") {
-      await runUpdateReadmeCommand(["--target", "cli"]);
+      await runRepoReadmeCommand(["--target", "cli"]);
     }
 
     runOrThrow("pnpm", ["-C", packageDir, "run", "build"], repoRoot, auth.commandEnv);
