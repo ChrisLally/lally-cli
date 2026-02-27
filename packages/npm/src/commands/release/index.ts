@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { runRepoReadmeCommand } from "../../repo/readme";
+import { runRepoReadmeCommand } from "@chris-lally/cli-repo";
 import { cleanupTempNpmrc, resolveNpmAuth } from "./auth";
 import { getStringFlag, hasFlag, parseArgs, parseTarget, printJson, releaseHelp } from "./args";
 import { findRepoRoot, loadRootEnv } from "./env";

@@ -12,5 +12,12 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   outDir: "dist",
-  noExternal: ["@chris-lally/cli-fumadocs"],
+  noExternal: [
+    "@chris-lally/cli-fumadocs",
+    "@chris-lally/cli-git",
+    "@chris-lally/cli-opensrc",
+    "@chris-lally/cli-db",
+    "@chris-lally/cli-repo",
+    "@chris-lally/cli-npm",
+  ],
 });

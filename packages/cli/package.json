@@ -1,6 +1,6 @@
 {
   "name": "@chris-lally/cli",
-  "version": "0.1.0-alpha.27",
+  "version": "0.1.0-alpha.29",
   "repository": {
     "type": "git",
     "url": "https://github.com/ChrisLally/lally-cli"
@@ -18,12 +18,20 @@
     "README.md"
   ],
   "scripts": {
-    "build": "pnpm --filter @chris-lally/cli-fumadocs run build && pnpm exec tsup --config tsup.config.ts",
-    "check-types": "pnpm --filter @chris-lally/cli-fumadocs run build && tsc --noEmit",
-    "dev": "ts-node src/bin/lally.ts"
+    "clean": "rm -rf dist *.tgz",
+    "build": "pnpm run clean && pnpm --filter @chris-lally/cli-fumadocs run build && pnpm --filter @chris-lally/cli-git run build && pnpm --filter @chris-lally/cli-opensrc run build && pnpm --filter @chris-lally/cli-db run build && pnpm --filter @chris-lally/cli-repo run build && pnpm --filter @chris-lally/cli-npm run build && pnpm exec tsup --config tsup.config.ts",
+    "check-types": "pnpm --filter @chris-lally/cli-fumadocs run build && pnpm --filter @chris-lally/cli-git run build && pnpm --filter @chris-lally/cli-opensrc run build && pnpm --filter @chris-lally/cli-db run build && pnpm --filter @chris-lally/cli-repo run build && pnpm --filter @chris-lally/cli-npm run build && tsc --noEmit",
+    "dev": "ts-node src/bin/lally.ts",
+    "verify:pack": "pnpm run build && npm pack --pack-destination ./dist",
+    "verify:bundle": "pnpm run verify:pack && echo 'Checking for runtime workspace imports...' && sh -c '! grep -R --line-number --include=\"*.js\" \"@chris-lally/cli-\" dist'"
   },
   "devDependencies": {
+    "@chris-lally/cli-db": "workspace:*",
     "@chris-lally/cli-fumadocs": "workspace:*",
+    "@chris-lally/cli-git": "workspace:*",
+    "@chris-lally/cli-npm": "workspace:*",
+    "@chris-lally/cli-opensrc": "workspace:*",
+    "@chris-lally/cli-repo": "workspace:*",
     "@types/node": "^22.15.3",
     "ts-node": "^10.9.2",
     "tsup": "^8.5.0",

@@ -20,9 +20,24 @@ importers:
 
   packages/cli:
     devDependencies:
+      '@chris-lally/cli-db':
+        specifier: workspace:*
+        version: link:../db
       '@chris-lally/cli-fumadocs':
         specifier: workspace:*
         version: link:../fumadocs
+      '@chris-lally/cli-git':
+        specifier: workspace:*
+        version: link:../git
+      '@chris-lally/cli-npm':
+        specifier: workspace:*
+        version: link:../npm
+      '@chris-lally/cli-opensrc':
+        specifier: workspace:*
+        version: link:../opensrc
+      '@chris-lally/cli-repo':
+        specifier: workspace:*
+        version: link:../repo
       '@types/node':
         specifier: ^22.15.3
         version: 22.15.3
@@ -36,8 +51,59 @@ importers:
         specifier: 5.9.2
         version: 5.9.2
 
+  packages/db:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.3
+        version: 22.15.3
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
+
   packages/fumadocs:
     devDependencies:
+      '@types/node':
+        specifier: ^22.15.3
+        version: 22.15.3
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
+
+  packages/git:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.3
+        version: 22.15.3
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
+
+  packages/npm:
+    devDependencies:
+      '@chris-lally/cli-repo':
+        specifier: workspace:*
+        version: link:../repo
+      '@types/node':
+        specifier: ^22.15.3
+        version: 22.15.3
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
+
+  packages/opensrc:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.3
+        version: 22.15.3
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
+
+  packages/repo:
+    devDependencies:
+      '@chris-lally/cli-git':
+        specifier: workspace:*
+        version: link:../git
       '@types/node':
         specifier: ^22.15.3
         version: 22.15.3

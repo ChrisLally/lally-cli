@@ -1,9 +1,9 @@
-import { runDbCommand } from "./commands/db/index";
-import { runRepoCommand } from "./commands/repo/index";
+import { runDbCommand } from "@chris-lally/cli-db";
+import { runRepoCommand, runRepoReadmeCommand } from "@chris-lally/cli-repo";
 import { runFumadocsCommand } from "@chris-lally/cli-fumadocs";
-import { runSyncCommand } from "./commands/git/sync/index";
-import { runOpensrcCommand } from "./commands/opensrc/index";
-import { runReleaseCommand } from "./commands/npm/release/index";
+import { runSyncCommand } from "@chris-lally/cli-git";
+import { runOpensrcCommand } from "@chris-lally/cli-opensrc";
+import { runReleaseCommand } from "@chris-lally/cli-npm";
 
 type CliArgs = {
   command: string | undefined;
@@ -118,7 +118,9 @@ export async function runCli(argv: string[]) {
     const [subcommand, ...gitArgs] = rest;
     if (subcommand === "sync") {
       const [syncCommand, ...syncArgs] = gitArgs;
-      const code = await runSyncCommand(syncCommand, syncArgs);
+      const code = await runSyncCommand(syncCommand, syncArgs, {
+        generateReadme: async (targetName: string) => runRepoReadmeCommand(["--target", targetName]),
+      });
       if (code !== 0) process.exitCode = code;
       return;
     }

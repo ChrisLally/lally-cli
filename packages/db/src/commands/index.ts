@@ -1,5 +1,11 @@
 import { addDbLocalPostgres, addDbMasterMigration, addDbSeedScript } from "./scaffold";
-import { getStringFlag, looksLikeAppDirectory, looksLikeMonorepoRoot, parseArgs, resolveAppRoot } from "../app";
+import {
+  getStringFlag,
+  looksLikeAppDirectory,
+  looksLikeMonorepoRoot,
+  parseArgs,
+  resolveAppRoot,
+} from "../shared/app";
 
 function dbHelp(): string {
   return [

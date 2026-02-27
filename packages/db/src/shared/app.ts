@@ -7,13 +7,6 @@ export type ParsedArgs = {
   flags: Map<string, string | boolean>;
 };
 
-export type LallyConfig = {
-  fumadocs?: {
-    basePath?: string;
-    contentRoot?: string;
-  };
-};
-
 export function parseArgs(args: string[]): ParsedArgs {
   const [item, ...rest] = args;
   const flags = new Map<string, string | boolean>();
@@ -38,12 +31,6 @@ export function parseArgs(args: string[]): ParsedArgs {
 export function getStringFlag(flags: Map<string, string | boolean>, key: string): string | null {
   const value = flags.get(key);
   return typeof value === "string" ? value : null;
-}
-
-export function toTitleCase(segment: string): string {
-  return segment
-    .replace(/[-_]/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 export function resolveAppRoot(rawAppPath: string | null): string {
@@ -86,38 +73,4 @@ export async function loadJson<T>(filePath: string): Promise<T | null> {
   } catch {
     return null;
   }
-}
-
-export function normalizeBasePath(raw: string | undefined): string {
-  if (!raw) {
-    throw new Error("Missing `fumadocs.basePath` in lally.config.json");
-  }
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    throw new Error("Missing `fumadocs.basePath` in lally.config.json");
-  }
-  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-}
-
-export function normalizeContentRoot(raw: string | undefined): string {
-  if (!raw) {
-    throw new Error("Missing `fumadocs.contentRoot` in lally.config.json");
-  }
-  const trimmed = raw.trim().replace(/^\/+|\/+$/g, "");
-  if (!trimmed) {
-    throw new Error("Missing `fumadocs.contentRoot` in lally.config.json");
-  }
-  return trimmed;
-}
-
-export async function getFumadocsSettings(appRoot: string): Promise<{ basePath: string; contentRoot: string }> {
-  const configPath = resolve(appRoot, "lally.config.json");
-  const parsed = await loadJson<LallyConfig>(configPath);
-  if (!parsed) {
-    throw new Error("Missing lally.config.json in app root. Run `lally init --app <path>` first.");
-  }
-  return {
-    basePath: normalizeBasePath(parsed?.fumadocs?.basePath),
-    contentRoot: normalizeContentRoot(parsed?.fumadocs?.contentRoot),
-  };
 }

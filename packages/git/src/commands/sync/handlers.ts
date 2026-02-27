@@ -8,7 +8,10 @@ import { syncHelp } from "./help";
 import { pullTarget, pushHistory, pushSnapshot } from "./native";
 import { printJson } from "./output";
 import { getBranch, getSyncSection, resolveTarget } from "./resolve";
-import { runRepoReadmeCommand } from "../../repo/readme";
+
+type SyncActionOptions = {
+  generateReadme?: (targetName: string) => Promise<number>;
+};
 
 type SyncRelease = {
   tagName: string | null;
@@ -141,8 +144,14 @@ async function updateLocalPackageVersion(repoRoot: string, target: SyncTarget, v
 /**
  * @description Auto-generate repository README for known sync targets before snapshot commit/push.
  */
-async function maybeGenerateTargetReadme(repoRoot: string, targetName: string, target: SyncTarget): Promise<void> {
+async function maybeGenerateTargetReadme(
+  repoRoot: string,
+  targetName: string,
+  target: SyncTarget,
+  options?: SyncActionOptions,
+): Promise<void> {
   if (targetName !== "cli") return;
+  if (!options?.generateReadme) return;
 
   const targetRoot = resolve(repoRoot, target.prefix);
   if (!existsSync(targetRoot)) return;
@@ -150,7 +159,7 @@ async function maybeGenerateTargetReadme(repoRoot: string, targetName: string, t
   const originalCwd = process.cwd();
   try {
     process.chdir(targetRoot);
-    const code = await runRepoReadmeCommand(["--target", targetName]);
+    const code = await options.generateReadme(targetName);
     if (code !== 0) {
       throw new Error(`README generation failed for target '${targetName}'`);
     }
@@ -276,7 +285,11 @@ export async function runSyncDoctor(args: string[]): Promise<number> {
 /**
  * @description Execute native push/pull flows for a sync target with optional tag handling.
  */
-export async function runSyncAction(action: "push" | "pull", args: string[]): Promise<number> {
+export async function runSyncAction(
+  action: "push" | "pull",
+  args: string[],
+  options?: SyncActionOptions,
+): Promise<number> {
   const { flags } = parseArgs([action, ...args]);
   const targetName = getStringFlag(flags, "target");
   const tagInput = getStringFlag(flags, "tag");
@@ -351,7 +364,7 @@ export async function runSyncAction(action: "push" | "pull", args: string[]): Pr
         await updateLocalPackageVersion(repoRoot, target, release.releaseVersion);
       }
 
-      await maybeGenerateTargetReadme(repoRoot, targetName, target);
+      await maybeGenerateTargetReadme(repoRoot, targetName, target, options);
 
       const dirtyFiles = getDirtyFilesForPrefix(repoRoot, target.prefix);
       if (dirtyFiles.length > 0 && !commitMessage) {

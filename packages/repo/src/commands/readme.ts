@@ -2,9 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
-import { getStringFlag, hasFlag, parseArgs } from "../git/subtree-args";
+import { findRepoRoot, getStringFlag, hasFlag, parseArgs } from "@chris-lally/cli-git";
 import { loadConfig, ReadmeTargetConfig } from "./config";
-import { findRepoRoot } from "../git/repo";
 
 type ResolvedReadmeTarget = {
   targetName: string;
