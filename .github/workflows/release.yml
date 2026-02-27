@@ -12,6 +12,9 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -83,6 +86,13 @@ jobs:
         run: |
           unset NODE_AUTH_TOKEN NPM_TOKEN
           npm config delete //registry.npmjs.org/:_authToken || true
+
+      - name: Verify OIDC for npm trusted publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || { echo "Missing ACTIONS_ID_TOKEN_REQUEST_URL"; exit 1; }
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" || { echo "Missing ACTIONS_ID_TOKEN_REQUEST_TOKEN"; exit 1; }
 
       - name: Publish package
         run: npm publish --provenance --access public --tag ${{ steps.dist_tag.outputs.tag }}
