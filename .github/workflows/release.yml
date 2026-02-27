@@ -6,16 +6,14 @@ on:
       - "cli-v*"
 
 permissions:
-  contents: write
+  contents: read
   id-token: write
-  deployments: write
 
 jobs:
   publish-cli:
     permissions:
-      contents: write
+      contents: read
       id-token: write
-      deployments: write
     uses: ChrisLally/lally-cli/.github/workflows/release-publish.yml@main
     with:
       tag_prefix: "cli-v"

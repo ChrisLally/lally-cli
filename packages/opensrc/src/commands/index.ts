@@ -5,6 +5,8 @@ type OpenSrcRunner = {
   prefixArgs: string[];
 };
 
+type ModifyFlag = string | boolean | undefined;
+
 function hasCommand(command: string): boolean {
   try {
     const result = spawnSync(command, ["--version"], { stdio: "ignore", env: process.env });
@@ -31,6 +33,27 @@ function resolveOpenSrcRunner(): OpenSrcRunner {
   throw new Error("No supported package manager runtime found. Install pnpm, npm, yarn, or bun.");
 }
 
+function parseModifyFlag(argv: string[]): ModifyFlag {
+  for (let i = 0; i < argv.length; i += 1) {
+    const token = argv[i];
+    if (!token) continue;
+
+    if (token === "--modify") {
+      const next = argv[i + 1];
+      if (next && !next.startsWith("--")) {
+        return next;
+      }
+      return true;
+    }
+
+    if (token.startsWith("--modify=")) {
+      return token.slice("--modify=".length);
+    }
+  }
+
+  return undefined;
+}
+
 /**
  * @description Extract positional arguments (non-flag tokens) from opensrc argv tail.
  */
@@ -42,6 +65,11 @@ function getPositionalArgs(argv: string[]): string[] {
     if (!token) continue;
 
     if (token.startsWith("--")) {
+      if (token === "--modify" || token.startsWith("--modify=")) {
+        const next = argv[i + 1];
+        if (token === "--modify" && next && !next.startsWith("--")) i += 1;
+        continue;
+      }
       if (token.includes("=")) continue;
       const next = argv[i + 1];
       if (next && !next.startsWith("--")) i += 1;
@@ -54,9 +82,11 @@ function getPositionalArgs(argv: string[]): string[] {
   return positional;
 }
 
-function runOpensrc(commandArgs: string[], modifyFlag: string | boolean | undefined): void {
+function runOpensrc(commandArgs: string[], modifyFlag: ModifyFlag): void {
   if (modifyFlag === true) {
     commandArgs.push("--modify");
+  } else if (modifyFlag === false) {
+    commandArgs.push("--modify=false");
   } else if (typeof modifyFlag === "string") {
     const normalized = modifyFlag.trim().toLowerCase();
     if (normalized === "true" || normalized === "false") {
@@ -84,12 +114,13 @@ function runOpensrc(commandArgs: string[], modifyFlag: string | boolean | undefi
 /**
  * @description Run opensrc via the available package manager runtime without requiring global install.
  */
-export function runOpensrcCommand(argsAfterItem: string[], modifyFlag: string | boolean | undefined): void {
+export function runOpensrcCommand(argsAfterItem: string[], modifyFlag?: ModifyFlag): void {
+  const effectiveModifyFlag = modifyFlag ?? parseModifyFlag(argsAfterItem) ?? false;
   const positional = getPositionalArgs(argsAfterItem);
   const first = positional[0];
 
   if (first === "list") {
-    runOpensrc(["list"], modifyFlag);
+    runOpensrc(["list"], effectiveModifyFlag);
     return;
   }
 
@@ -98,7 +129,7 @@ export function runOpensrcCommand(argsAfterItem: string[], modifyFlag: string | 
     if (targets.length === 0) {
       throw new Error("Missing remove target(s). Usage: lally opensrc remove <target...>");
     }
-    runOpensrc(["remove", ...targets], modifyFlag);
+    runOpensrc(["remove", ...targets], effectiveModifyFlag);
     return;
   }
 
@@ -108,5 +139,5 @@ export function runOpensrcCommand(argsAfterItem: string[], modifyFlag: string | 
     );
   }
 
-  runOpensrc([...positional], modifyFlag);
+  runOpensrc([...positional], effectiveModifyFlag);
 }
