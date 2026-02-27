@@ -19,3 +19,4 @@ jobs:
     uses: ChrisLally/lally-cli/.github/workflows/release-publish.yml@main
     with:
       tag_prefix: "cli-v"
+      package_dir: "packages/cli"
