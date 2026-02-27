@@ -1,9 +1,9 @@
-name: Release Alpha
+name: Release
 
 on:
   push:
     tags:
-      - "cli-v*-alpha.*"
+      - "cli-v*"
 
 permissions:
   contents: read
@@ -12,8 +12,6 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    env:
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,7 +37,7 @@ jobs:
           set -euo pipefail
           TAG="${GITHUB_REF_NAME}"
           case "$TAG" in
-            cli-v*-alpha.*)
+            cli-v*)
               VERSION="${TAG#cli-v}"
               ;;
             *)
@@ -48,12 +46,21 @@ jobs:
               ;;
           esac
 
-          if [[ "$VERSION" != *"-alpha."* ]]; then
-            echo "Tag must resolve to an alpha version: $VERSION"
-            exit 1
-          fi
-
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve npm dist-tag
+        id: dist_tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.meta.outputs.version }}"
+          if [[ "$VERSION" == *-* ]]; then
+            PRERELEASE="${VERSION#*-}"
+            CHANNEL="${PRERELEASE%%.*}"
+          else
+            CHANNEL="latest"
+          fi
+          echo "tag=$CHANNEL" >> "$GITHUB_OUTPUT"
 
       - name: Validate package version matches tag
         shell: bash
@@ -72,5 +79,5 @@ jobs:
       - name: Check types
         run: pnpm run check-types
 
-      - name: Publish alpha
-        run: npm publish --provenance --access public --tag alpha
+      - name: Publish package
+        run: npm publish --provenance --access public --tag ${{ steps.dist_tag.outputs.tag }}
