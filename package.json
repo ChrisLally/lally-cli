@@ -3,11 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "build": "turbo run build",
-    "dev": "turbo run dev",
-    "lint": "turbo run lint",
+    "build": "pnpm --filter @chris-lally/cli build",
+    "dev:cli": "pnpm --filter @chris-lally/cli run dev:cli",
+    "lint": "pnpm --filter @chris-lally/cli lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "check-types": "turbo run check-types"
+    "check-types": "pnpm --filter @chris-lally/cli check-types"
   },
   "devDependencies": {
     "prettier": "^3.7.4",

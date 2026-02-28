@@ -31,31 +31,23 @@ Usage:
   lally <domain> <command> [options]
 
 Domains:
-  opensrc   Fetch/list/remove source context via opensrc
-  fumadocs  Fumadocs init/scaffold/check/clean/layout commands
+  fumadocs  Fumadocs init/scaffold/check/clean/layout/generate commands
   db        Database scaffolding commands
   repo      Repository maintenance commands
   git       Git-oriented sync workflows
-  npm       npm release workflows
 
 Domain usage:
-  lally opensrc <fetch|list|remove> [...args]
-  lally fumadocs <init|section|page-shell|sidebar-history|check|clean|layout> [options]
+  lally fumadocs <init|section|page-shell|sidebar-history|check|clean|layout|generate> [options]
   lally db <local-postgres|master-migration|seed-script> [options]
   lally repo <readme> [options]
   lally git sync <init|doctor|push|pull> [options]
-  lally npm release <target> --tag <tag> [--dry-run] [--json]
 
 Examples:
-  lally opensrc fetch zod github:shadcn-ui/ui --modify=false
-  lally opensrc list
-  lally opensrc remove zod
   lally fumadocs init --app apps/web
   lally fumadocs section --name handbook --app apps/web
   lally db local-postgres --app apps/web
   lally repo readme --target cli
   lally git sync doctor --target statements
-  lally npm release cli --tag alpha --dry-run
 ```
 
 ## License
