@@ -87,6 +87,12 @@ export async function runFumadocsCommand(args: string[]): Promise<number> {
       const [generator, ...generatorArgs] = rest;
       if (!generator || generator === "--help" || generator === "-h" || generator === "help") {
         console.log("Usage: lally fumadocs generate <sdk|cli> --app <path> [--dry-run] [--entry <file>] [--out <dir>]");
+        console.log(
+          "       Optional flags: --output-dir --package-name --title --description --section-overrides --section-order --component-import-path --component-export-name --component-file-path",
+        );
+        console.log("       SDK-only: --browser-safe-functions name1,name2");
+        console.log("       CLI-only: --sources file1.ts,file2.ts");
+        console.log("       Config file is optional; flags/env vars override lally.config.json defaults.");
         return 0;
       }
       if (generator === "sdk") {

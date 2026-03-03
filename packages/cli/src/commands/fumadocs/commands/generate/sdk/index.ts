@@ -8,6 +8,9 @@ type SDKConfig = {
   outputDir: string;
   packageName: string;
   title?: string;
+  description?: string;
+  sectionOverrides?: Record<string, string>;
+  sectionOrder?: string[];
   componentImportPath: string;
   componentExportName: string;
   componentFilePath: string;
@@ -25,12 +28,6 @@ type RequiredSDKStringField =
 type LallyConfig = {
   fumadocs?: {
     sdk?: SDKConfig;
-  };
-};
-
-type ShadcnComponentsConfig = {
-  aliases?: {
-    ui?: string;
   };
 };
 
@@ -135,10 +132,12 @@ function toSlug(name: string): string {
     .toLowerCase();
 }
 
-function toSectionFromSource(source: string): string {
+function toSectionFromSource(source: string, sectionOverrides?: Record<string, string>): string {
   const cleaned = source.replace(/^\.\/?/, "").replace(/^\//, "");
   const segment = cleaned.split("/")[0] ?? "Other";
   if (!segment || segment === ".") return "Other";
+  const override = sectionOverrides?.[segment];
+  if (typeof override === "string" && override.trim()) return override.trim();
   return segment.replace(/[-_]/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
@@ -165,26 +164,93 @@ async function cleanGeneratedMdx(dir: string): Promise<void> {
 }
 
 function validateSdkConfig(config: SDKConfig | undefined): SDKConfig {
-  if (!config) {
-    throw new Error(
-      [
-        "Missing `fumadocs.sdk` in lally.config.json.",
-        "Add:",
-        "{",
-        '  "fumadocs": {',
-        '    "sdk": {',
-        '      "entry": "../packages/your-sdk/src/index.ts",',
-        '      "outputDir": "content/dashboard/sdks/js",',
-        '      "packageName": "@your-scope/sdk",',
-        '      "componentImportPath": "@/components/sdk-layout",',
-        '      "componentExportName": "SDKFunctionPage",',
-        '      "componentFilePath": "src/components/sdk-layout/index.ts"',
-        "    }",
-        "  }",
-        "}",
-      ].join("\n"),
-    );
+  return config as SDKConfig;
+}
+
+function parseCsv(raw: string | null | undefined): string[] | undefined {
+  if (!raw) return undefined;
+  const values = raw
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return values.length > 0 ? values : undefined;
+}
+
+function parseKeyValueCsv(raw: string | null | undefined): Record<string, string> | undefined {
+  if (!raw) return undefined;
+  const result: Record<string, string> = {};
+  const entries = raw
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (entries.length === 0) return undefined;
+
+  for (const entry of entries) {
+    const separator = entry.indexOf("=");
+    if (separator <= 0) continue;
+    const key = entry.slice(0, separator).trim();
+    const value = entry.slice(separator + 1).trim();
+    if (!key || !value) continue;
+    result[key] = value;
   }
+
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function coalesce(...values: Array<string | undefined | null>): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function resolveSdkConfig(
+  config: SDKConfig | undefined,
+  overrides: {
+    entry?: string | null;
+    outputDir?: string | null;
+    packageName?: string | null;
+    title?: string | null;
+    description?: string | null;
+    sectionOverrides?: Record<string, string>;
+    sectionOrder?: string[];
+    componentImportPath?: string | null;
+    componentExportName?: string | null;
+    componentFilePath?: string | null;
+    browserSafeFunctions?: string[];
+  },
+): SDKConfig {
+  const resolved: Partial<SDKConfig> = {
+    entry: coalesce(overrides.entry, process.env.LALLY_FUMADOCS_SDK_ENTRY, config?.entry),
+    outputDir: coalesce(overrides.outputDir, process.env.LALLY_FUMADOCS_SDK_OUTPUT_DIR, config?.outputDir),
+    packageName: coalesce(overrides.packageName, process.env.LALLY_FUMADOCS_SDK_PACKAGE_NAME, config?.packageName),
+    title: coalesce(overrides.title, process.env.LALLY_FUMADOCS_SDK_TITLE, config?.title),
+    description: coalesce(overrides.description, process.env.LALLY_FUMADOCS_SDK_DESCRIPTION, config?.description),
+    sectionOverrides:
+      overrides.sectionOverrides ??
+      parseKeyValueCsv(process.env.LALLY_FUMADOCS_SDK_SECTION_OVERRIDES) ??
+      config?.sectionOverrides,
+    sectionOrder: overrides.sectionOrder ?? parseCsv(process.env.LALLY_FUMADOCS_SDK_SECTION_ORDER) ?? config?.sectionOrder,
+    componentImportPath: coalesce(
+      overrides.componentImportPath,
+      process.env.LALLY_FUMADOCS_SDK_COMPONENT_IMPORT_PATH,
+      config?.componentImportPath,
+    ),
+    componentExportName: coalesce(
+      overrides.componentExportName,
+      process.env.LALLY_FUMADOCS_SDK_COMPONENT_EXPORT_NAME,
+      config?.componentExportName,
+    ),
+    componentFilePath: coalesce(
+      overrides.componentFilePath,
+      process.env.LALLY_FUMADOCS_SDK_COMPONENT_FILE_PATH,
+      config?.componentFilePath,
+    ),
+    browserSafeFunctions:
+      overrides.browserSafeFunctions ??
+      parseCsv(process.env.LALLY_FUMADOCS_SDK_BROWSER_SAFE_FUNCTIONS) ??
+      config?.browserSafeFunctions,
+  };
 
   const requiredFields: RequiredSDKStringField[] = [
     "entry",
@@ -194,15 +260,27 @@ function validateSdkConfig(config: SDKConfig | undefined): SDKConfig {
     "componentExportName",
     "componentFilePath",
   ];
-
-  for (const field of requiredFields) {
-    const value = config[field];
-    if (!value || !value.trim()) {
-      throw new Error(`Missing fumadocs.sdk.${field} in lally.config.json`);
-    }
+  const missing = requiredFields.filter((field) => {
+    const value = resolved[field];
+    return typeof value !== "string" || !value.trim();
+  });
+  if (missing.length > 0) {
+    throw new Error(
+      [
+        `Missing required SDK generator settings: ${missing.join(", ")}`,
+        "Provide values using:",
+        "  - flags: --entry --out|--output-dir --package-name [--title] [--description] [--section-overrides a=b,c=d] [--section-order a,b] --component-import-path --component-export-name --component-file-path [--browser-safe-functions a,b]",
+        "  - env vars: LALLY_FUMADOCS_SDK_ENTRY, LALLY_FUMADOCS_SDK_OUTPUT_DIR, LALLY_FUMADOCS_SDK_PACKAGE_NAME, LALLY_FUMADOCS_SDK_TITLE,",
+        "    LALLY_FUMADOCS_SDK_DESCRIPTION, LALLY_FUMADOCS_SDK_SECTION_OVERRIDES, LALLY_FUMADOCS_SDK_SECTION_ORDER,",
+        "    LALLY_FUMADOCS_SDK_COMPONENT_IMPORT_PATH, LALLY_FUMADOCS_SDK_COMPONENT_EXPORT_NAME,",
+        "    LALLY_FUMADOCS_SDK_COMPONENT_FILE_PATH,",
+        "    LALLY_FUMADOCS_SDK_BROWSER_SAFE_FUNCTIONS",
+        "  - or lally.config.json fumadocs.sdk defaults",
+      ].join("\n"),
+    );
   }
 
-  return config;
+  return resolved as SDKConfig;
 }
 
 function extractDocsUrlFromSymbol(ts: typeof import("typescript"), symbol: import("typescript").Symbol, decl?: import("typescript").Declaration): string | undefined {
@@ -433,18 +511,50 @@ function compareFunctionItems(a: ExportItem, b: ExportItem, browserSafeNames: Se
   return a.name.localeCompare(b.name);
 }
 
+function compareSections(
+  a: string,
+  b: string,
+  browserSafeNames: Set<string>,
+  sectionOrder?: string[],
+): number {
+  if (sectionOrder && sectionOrder.length > 0) {
+    const orderMap = new Map(sectionOrder.map((name, index) => [name.trim().toLowerCase(), index]));
+    const aIndex = orderMap.get(a.toLowerCase());
+    const bIndex = orderMap.get(b.toLowerCase());
+    if (aIndex !== undefined && bIndex !== undefined) return aIndex - bIndex;
+    if (aIndex !== undefined) return -1;
+    if (bIndex !== undefined) return 1;
+  }
+
+  if (browserSafeNames.size > 0) {
+    const rank = (value: string): number => {
+      if (value === "Browser Safe") return 0;
+      if (value === "Node Runtime") return 1;
+      return 2;
+    };
+    return rank(a) - rank(b) || a.localeCompare(b);
+  }
+
+  return a.localeCompare(b);
+}
+
 export async function runGenerateSdkCommand(appRoot: string, rawArgs: string[]): Promise<number> {
   const { flags } = parseArgs(["_", ...rawArgs]);
   const dryRun = flags.get("dry-run") === true;
   const entryOverride = getStringFlag(flags, "entry");
-  const outputOverride = getStringFlag(flags, "out");
+  const outputOverride = getStringFlag(flags, "out") ?? getStringFlag(flags, "output-dir");
+  const packageNameOverride = getStringFlag(flags, "package-name");
+  const titleOverride = getStringFlag(flags, "title");
+  const descriptionOverride = getStringFlag(flags, "description");
+  const sectionOverridesOverride = parseKeyValueCsv(getStringFlag(flags, "section-overrides"));
+  const sectionOrderOverride = parseCsv(getStringFlag(flags, "section-order"));
+  const componentImportPathOverride = getStringFlag(flags, "component-import-path");
+  const componentExportNameOverride = getStringFlag(flags, "component-export-name");
+  const componentFilePathOverride = getStringFlag(flags, "component-file-path");
+  const browserSafeFunctionsOverride = parseCsv(getStringFlag(flags, "browser-safe-functions"));
 
   const configPath = resolve(appRoot, "lally.config.json");
   const config = await loadJson<LallyConfig>(configPath);
-  if (!config) {
-    console.error("Missing lally.config.json in app root. Run `lally fumadocs init --app <path>` first.");
-    return 1;
-  }
 
   let ts: typeof import("typescript");
   try {
@@ -455,12 +565,22 @@ export async function runGenerateSdkCommand(appRoot: string, rawArgs: string[]):
   }
 
   try {
-    const sdkConfig = validateSdkConfig(config.fumadocs?.sdk);
-    const sdkEntry = resolve(appRoot, entryOverride ?? sdkConfig.entry);
-    const outputDir = resolve(appRoot, outputOverride ?? sdkConfig.outputDir);
+    const sdkConfig = resolveSdkConfig(validateSdkConfig(config?.fumadocs?.sdk), {
+      entry: entryOverride,
+      outputDir: outputOverride,
+      packageName: packageNameOverride,
+      title: titleOverride,
+      description: descriptionOverride,
+      sectionOverrides: sectionOverridesOverride,
+      sectionOrder: sectionOrderOverride,
+      componentImportPath: componentImportPathOverride,
+      componentExportName: componentExportNameOverride,
+      componentFilePath: componentFilePathOverride,
+      browserSafeFunctions: browserSafeFunctionsOverride,
+    });
+    const sdkEntry = resolve(appRoot, sdkConfig.entry);
+    const outputDir = resolve(appRoot, sdkConfig.outputDir);
     const componentFilePath = resolve(appRoot, sdkConfig.componentFilePath);
-    const componentsConfig = await loadJson<ShadcnComponentsConfig>(resolve(appRoot, "components.json"));
-
     if (!existsSync(sdkEntry)) {
       console.error(`SDK entry file not found: ${sdkEntry}`);
       return 1;
@@ -469,11 +589,6 @@ export async function runGenerateSdkCommand(appRoot: string, rawArgs: string[]):
     if (!existsSync(componentFilePath)) {
       console.error(`Configured SDK component file not found: ${componentFilePath}`);
       console.error("Set fumadocs.sdk.componentFilePath to a real file before generating SDK docs.");
-      return 1;
-    }
-
-    if (!componentsConfig?.aliases?.ui) {
-      console.error("Missing components.json aliases.ui; run shadcn init or add a valid ui alias first.");
       return 1;
     }
 
@@ -714,23 +829,15 @@ export async function runGenerateSdkCommand(appRoot: string, rawArgs: string[]):
           ? browserSafeNames.has(item.name)
             ? "Browser Safe"
             : "Node Runtime"
-          : toSectionFromSource(item.source);
+          : toSectionFromSource(item.source, sdkConfig.sectionOverrides);
       const list = grouped.get(section) ?? [];
       list.push(item);
       grouped.set(section, list);
     }
 
-    const orderedSections =
-      browserSafeNames.size > 0
-        ? [...grouped.keys()].sort((a, b) => {
-            const rank = (value: string): number => {
-              if (value === "Browser Safe") return 0;
-              if (value === "Node Runtime") return 1;
-              return 2;
-            };
-            return rank(a) - rank(b) || a.localeCompare(b);
-          })
-        : [...grouped.keys()].sort((a, b) => a.localeCompare(b));
+    const orderedSections = [...grouped.keys()].sort((a, b) =>
+      compareSections(a, b, browserSafeNames, sdkConfig.sectionOrder),
+    );
 
     const constantNames = new Set(constantExports.map((c) => c.name));
     const constantsByFunction = new Map<string, ConstantData[]>();
@@ -837,8 +944,9 @@ export async function runGenerateSdkCommand(appRoot: string, rawArgs: string[]):
       })
       .join("\n\n");
 
-    const sdkTitle = (sdkConfig.title ?? "SDKs").trim() || "SDKs";
-    const indexMdx = `---\ntitle: ${yamlQuoted(sdkTitle)}\ndescription: ${yamlQuoted(`Complete API surface for ${sdkConfig.packageName}`)}\n---\n\n${sectionLinks}\n`;
+    const sdkTitle = (sdkConfig.title ?? "SDK").trim() || "SDK";
+    const sdkDescription = (sdkConfig.description ?? `Complete API surface for ${sdkConfig.packageName}`).trim();
+    const indexMdx = `---\ntitle: ${yamlQuoted(sdkTitle)}\ndescription: ${yamlQuoted(sdkDescription)}\n---\n\n${sectionLinks}\n`;
 
     if (!dryRun) {
       await writeFile(resolve(outputDir, "index.mdx"), indexMdx, "utf8");

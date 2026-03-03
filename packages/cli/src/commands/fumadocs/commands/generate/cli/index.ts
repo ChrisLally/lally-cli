@@ -19,12 +19,6 @@ type LallyConfig = {
   };
 };
 
-type ShadcnComponentsConfig = {
-  aliases?: {
-    ui?: string;
-  };
-};
-
 type CLIArgumentData = {
   name: string;
   type?: string;
@@ -538,26 +532,61 @@ async function cleanGeneratedMdx(dir: string): Promise<void> {
 }
 
 function validateCliConfig(config: CLIConfig | undefined): CLIConfig {
-  if (!config) {
-    throw new Error(
-      [
-        "Missing `fumadocs.cli` in lally.config.json.",
-        "Add:",
-        "{",
-        '  "fumadocs": {',
-        '    "cli": {',
-        '      "entry": "../../packages/lally-cli/packages/cli/src/main.ts",',
-        '      "outputDir": "content/docs/cli",',
-        '      "packageName": "@your-scope/cli",',
-        '      "componentImportPath": "@/cli-layout",',
-        '      "componentExportName": "CLICommandPage",',
-        '      "componentFilePath": "src/cli-layout/index.ts"',
-        "    }",
-        "  }",
-        "}",
-      ].join("\n"),
-    );
+  return config as CLIConfig;
+}
+
+function parseCsv(raw: string | null | undefined): string[] | undefined {
+  if (!raw) return undefined;
+  const values = raw
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return values.length > 0 ? values : undefined;
+}
+
+function coalesce(...values: Array<string | undefined | null>): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
   }
+  return undefined;
+}
+
+function resolveCliConfig(
+  config: CLIConfig | undefined,
+  overrides: {
+    entry?: string | null;
+    outputDir?: string | null;
+    packageName?: string | null;
+    componentImportPath?: string | null;
+    componentExportName?: string | null;
+    componentFilePath?: string | null;
+    sources?: string[];
+  },
+): CLIConfig {
+  const resolved: Partial<CLIConfig> = {
+    entry: coalesce(overrides.entry, process.env.LALLY_FUMADOCS_CLI_ENTRY, config?.entry),
+    outputDir: coalesce(overrides.outputDir, process.env.LALLY_FUMADOCS_CLI_OUTPUT_DIR, config?.outputDir),
+    packageName: coalesce(overrides.packageName, process.env.LALLY_FUMADOCS_CLI_PACKAGE_NAME, config?.packageName),
+    componentImportPath: coalesce(
+      overrides.componentImportPath,
+      process.env.LALLY_FUMADOCS_CLI_COMPONENT_IMPORT_PATH,
+      config?.componentImportPath,
+    ),
+    componentExportName: coalesce(
+      overrides.componentExportName,
+      process.env.LALLY_FUMADOCS_CLI_COMPONENT_EXPORT_NAME,
+      config?.componentExportName,
+    ),
+    componentFilePath: coalesce(
+      overrides.componentFilePath,
+      process.env.LALLY_FUMADOCS_CLI_COMPONENT_FILE_PATH,
+      config?.componentFilePath,
+    ),
+    sources:
+      overrides.sources ??
+      parseCsv(process.env.LALLY_FUMADOCS_CLI_SOURCES) ??
+      config?.sources,
+  };
 
   const requiredFields: Array<keyof CLIConfig> = [
     "entry",
@@ -567,15 +596,26 @@ function validateCliConfig(config: CLIConfig | undefined): CLIConfig {
     "componentExportName",
     "componentFilePath",
   ];
+  const missing = requiredFields.filter((field) => {
+    const value = resolved[field];
+    return typeof value !== "string" || !value.trim();
+  });
 
-  for (const field of requiredFields) {
-    const value = config[field];
-    if (typeof value !== "string" || !value.trim()) {
-      throw new Error(`Missing fumadocs.cli.${field} in lally.config.json`);
-    }
+  if (missing.length > 0) {
+    throw new Error(
+      [
+        `Missing required CLI generator settings: ${missing.join(", ")}`,
+        "Provide values using:",
+        "  - flags: --entry --out|--output-dir --package-name --component-import-path --component-export-name --component-file-path [--sources a.ts,b.ts]",
+        "  - env vars: LALLY_FUMADOCS_CLI_ENTRY, LALLY_FUMADOCS_CLI_OUTPUT_DIR, LALLY_FUMADOCS_CLI_PACKAGE_NAME,",
+        "    LALLY_FUMADOCS_CLI_COMPONENT_IMPORT_PATH, LALLY_FUMADOCS_CLI_COMPONENT_EXPORT_NAME,",
+        "    LALLY_FUMADOCS_CLI_COMPONENT_FILE_PATH, LALLY_FUMADOCS_CLI_SOURCES",
+        "  - or lally.config.json fumadocs.cli defaults",
+      ].join("\n"),
+    );
   }
 
-  return config;
+  return resolved as CLIConfig;
 }
 
 async function extractDocsFromSource(sourcePath: string): Promise<HelpDoc[]> {
@@ -642,22 +682,29 @@ export async function runGenerateCliCommand(appRoot: string, rawArgs: string[]):
   const { flags } = parseArgs(["_", ...rawArgs]);
   const dryRun = flags.get("dry-run") === true;
   const entryOverride = getStringFlag(flags, "entry");
-  const outputOverride = getStringFlag(flags, "out");
+  const outputOverride = getStringFlag(flags, "out") ?? getStringFlag(flags, "output-dir");
+  const packageNameOverride = getStringFlag(flags, "package-name");
+  const componentImportPathOverride = getStringFlag(flags, "component-import-path");
+  const componentExportNameOverride = getStringFlag(flags, "component-export-name");
+  const componentFilePathOverride = getStringFlag(flags, "component-file-path");
+  const sourcesOverride = parseCsv(getStringFlag(flags, "sources"));
 
   const configPath = resolve(appRoot, "lally.config.json");
   const config = await loadJson<LallyConfig>(configPath);
-  if (!config) {
-    console.error("Missing lally.config.json in app root. Run `lally fumadocs init --app <path>` first.");
-    return 1;
-  }
 
   try {
-    const cliConfig = validateCliConfig(config.fumadocs?.cli);
+    const cliConfig = resolveCliConfig(validateCliConfig(config?.fumadocs?.cli), {
+      entry: entryOverride,
+      outputDir: outputOverride,
+      packageName: packageNameOverride,
+      componentImportPath: componentImportPathOverride,
+      componentExportName: componentExportNameOverride,
+      componentFilePath: componentFilePathOverride,
+      sources: sourcesOverride,
+    });
     const entryPath = resolve(appRoot, entryOverride ?? cliConfig.entry);
     const outputDir = resolve(appRoot, outputOverride ?? cliConfig.outputDir);
     const componentFilePath = resolve(appRoot, cliConfig.componentFilePath);
-    const componentsConfig = await loadJson<ShadcnComponentsConfig>(resolve(appRoot, "components.json"));
-
     if (!existsSync(entryPath)) {
       console.error(`CLI entry file not found: ${entryPath}`);
       return 1;
@@ -666,11 +713,6 @@ export async function runGenerateCliCommand(appRoot: string, rawArgs: string[]):
     if (!existsSync(componentFilePath)) {
       console.error(`Configured CLI component file not found: ${componentFilePath}`);
       console.error("Set fumadocs.cli.componentFilePath to a real file before generating CLI docs.");
-      return 1;
-    }
-
-    if (!componentsConfig?.aliases?.ui) {
-      console.error("Missing components.json aliases.ui; run shadcn init or add a valid ui alias first.");
       return 1;
     }
 
