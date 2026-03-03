@@ -20,6 +20,5 @@ jobs:
     with:
       tag_prefix: "cli-v"
       package_manager: "pnpm"
-      pnpm_version: "9"
       package_dir: "packages/cli"
       deployment_environment: "Preview - cli"
