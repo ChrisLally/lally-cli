@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { getStringFlag, loadJson, parseArgs } from "../../app";
 
 type CLIConfig = {
@@ -10,7 +10,6 @@ type CLIConfig = {
   componentImportPath: string;
   componentExportName: string;
   componentFilePath: string;
-  sources?: string[];
 };
 
 type LallyConfig = {
@@ -186,21 +185,33 @@ function extractHelpFromConsoleLogs(fnBody: string): string[] {
 
 function commandTitleFromUsageLine(usageLine: string): string {
   const trimmed = usageLine.trim();
-  if (!trimmed.startsWith("lally ")) return "lally";
-  const rest = trimmed.slice("lally ".length).trim();
-  const pieces = rest.split(/\s+/);
-  const domain = pieces[0] ?? "lally";
-  const firstArg = pieces[1] ?? "";
-  if (!firstArg || firstArg.startsWith("<")) return `lally ${domain}`;
-  return `lally ${domain} ${firstArg}`;
+  const pieces = trimmed.split(/\s+/).filter(Boolean);
+  const cliName = pieces[0];
+  if (!cliName || cliName.startsWith("-") || cliName.includes(":")) return "cli";
+  const domain = pieces[1] ?? cliName;
+  const firstArg = pieces[2] ?? "";
+  if (!firstArg || firstArg.startsWith("<")) return `${cliName} ${domain}`;
+  return `${cliName} ${domain} ${firstArg}`;
 }
 
 function extractCommandTitle(lines: string[], fallback: string): string {
   for (const line of lines) {
     const trimmed = line.trim();
-    if (trimmed.startsWith("lally ")) return commandTitleFromUsageLine(trimmed);
+    if (/^[a-z0-9_-]+\s+/i.test(trimmed)) return commandTitleFromUsageLine(trimmed);
   }
   return fallback;
+}
+
+function inferDescription(lines: string[], title: string): string {
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (trimmed === title) continue;
+    if (trimmed.endsWith(":")) continue;
+    if (trimmed.toLowerCase().startsWith("usage")) continue;
+    return trimmed.replace(/\s+/g, " ");
+  }
+  return `Command reference for ${title}.`;
 }
 
 function extractSection(lines: string[], heading: string): string[] {
@@ -263,7 +274,7 @@ function inferSubcommandsFromUsage(commandName: string, usage: string[]): CLISub
   if (base.length !== 2 || commandName.includes("<")) return [];
 
   const enumMatch = usage
-    .map((line) => line.match(/^lally\s+[^\s]+\s+<([^>]+)>/i))
+    .map((line) => line.match(/^[a-z0-9_-]+\s+[^\s]+\s+<([^>]+)>/i))
     .find((match) => Boolean(match?.[1]?.includes("|")));
 
   if (!enumMatch?.[1]) return [];
@@ -279,20 +290,20 @@ function parseSubcommands(lines: string[]): CLISubcommandData[] {
   const section = extractSection(lines, "Domain usage");
   const result: CLISubcommandData[] = [];
   for (const line of section) {
-    if (!line.startsWith("lally ")) continue;
+    if (!/^[a-z0-9_-]+\s+/i.test(line)) continue;
     const noExtra = line.replace(/\[options\]|\[\.\.\.args\]/g, "").trim();
-    const summaryMatch = noExtra.match(/^lally\s+([a-z0-9-]+)\s+<([^>]+)>/i);
+    const summaryMatch = noExtra.match(/^([a-z0-9_-]+)\s+([a-z0-9-]+)\s+<([^>]+)>/i);
     if (summaryMatch) {
       result.push({
-        name: `lally ${summaryMatch[1]}`,
-        summary: summaryMatch[2].split("|").map((s) => s.trim()).join(", "),
+        name: `${summaryMatch[1]} ${summaryMatch[2]}`,
+        summary: summaryMatch[3].split("|").map((s) => s.trim()).join(", "),
       });
       continue;
     }
 
     const tokens = noExtra.split(/\s+/);
     if (tokens.length >= 3) {
-      const name = `lally ${tokens[1]} ${tokens[2]}`;
+      const name = `${tokens[0]} ${tokens[1]} ${tokens[2]}`;
       result.push({ name });
     }
   }
@@ -425,12 +436,13 @@ function toPageData(doc: HelpDoc): CLICommandPageData {
   const presetsRaw = extractSection(doc.lines, "Presets").map(stripIndent).filter(Boolean);
   const authRaw = extractSection(doc.lines, "Auth resolution (first match wins)").map(stripIndent).filter(Boolean);
 
-  const usage = usageRaw.length > 0 ? usageRaw : [`lally ${doc.id}`];
+  const usage = usageRaw.length > 0 ? usageRaw : [doc.title];
+  const cliPrefix = usage[0]?.trim().split(/\s+/)[0] ?? "";
   const firstLine = doc.lines[0]?.trim() ?? "";
-  const summary = firstLine && !firstLine.includes(":") && firstLine !== "lally" ? firstLine : undefined;
+  const summary = firstLine && !firstLine.includes(":") && firstLine !== cliPrefix ? firstLine : undefined;
 
   const examples: CLIExampleData[] = examplesRaw
-    .filter((line) => line.startsWith("lally "))
+    .filter((line) => Boolean(cliPrefix) && line.startsWith(`${cliPrefix} `))
     .map((line) => ({ command: line }));
 
   const notes: CLINoteData[] = [];
@@ -535,15 +547,6 @@ function validateCliConfig(config: CLIConfig | undefined): CLIConfig {
   return config as CLIConfig;
 }
 
-function parseCsv(raw: string | null | undefined): string[] | undefined {
-  if (!raw) return undefined;
-  const values = raw
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-  return values.length > 0 ? values : undefined;
-}
-
 function coalesce(...values: Array<string | undefined | null>): string | undefined {
   for (const value of values) {
     if (typeof value === "string" && value.trim()) return value.trim();
@@ -560,7 +563,6 @@ function resolveCliConfig(
     componentImportPath?: string | null;
     componentExportName?: string | null;
     componentFilePath?: string | null;
-    sources?: string[];
   },
 ): CLIConfig {
   const resolved: Partial<CLIConfig> = {
@@ -582,10 +584,6 @@ function resolveCliConfig(
       process.env.LALLY_FUMADOCS_CLI_COMPONENT_FILE_PATH,
       config?.componentFilePath,
     ),
-    sources:
-      overrides.sources ??
-      parseCsv(process.env.LALLY_FUMADOCS_CLI_SOURCES) ??
-      config?.sources,
   };
 
   const requiredFields: Array<keyof CLIConfig> = [
@@ -606,16 +604,96 @@ function resolveCliConfig(
       [
         `Missing required CLI generator settings: ${missing.join(", ")}`,
         "Provide values using:",
-        "  - flags: --entry --out|--output-dir --package-name --component-import-path --component-export-name --component-file-path [--sources a.ts,b.ts]",
+        "  - flags: --entry --out|--output-dir --package-name --component-import-path --component-export-name --component-file-path",
         "  - env vars: LALLY_FUMADOCS_CLI_ENTRY, LALLY_FUMADOCS_CLI_OUTPUT_DIR, LALLY_FUMADOCS_CLI_PACKAGE_NAME,",
         "    LALLY_FUMADOCS_CLI_COMPONENT_IMPORT_PATH, LALLY_FUMADOCS_CLI_COMPONENT_EXPORT_NAME,",
-        "    LALLY_FUMADOCS_CLI_COMPONENT_FILE_PATH, LALLY_FUMADOCS_CLI_SOURCES",
+        "    LALLY_FUMADOCS_CLI_COMPONENT_FILE_PATH",
         "  - or lally.config.json fumadocs.cli defaults",
       ].join("\n"),
     );
   }
 
   return resolved as CLIConfig;
+}
+
+function resolveImportFile(fromFile: string, specifier: string): string | null {
+  const base = resolve(dirname(fromFile), specifier);
+  const tsBase = base.replace(/\.(mjs|cjs|js)$/i, "");
+  const candidates = [
+    base,
+    `${base}.ts`,
+    `${base}.tsx`,
+    `${base}.mts`,
+    `${base}.cts`,
+    `${base}.js`,
+    `${base}.mjs`,
+    `${base}.cjs`,
+    resolve(base, "index.ts"),
+    resolve(base, "index.tsx"),
+    resolve(base, "index.mts"),
+    resolve(base, "index.cts"),
+    resolve(base, "index.js"),
+    resolve(base, "index.mjs"),
+    resolve(base, "index.cjs"),
+    `${tsBase}.ts`,
+    `${tsBase}.tsx`,
+    `${tsBase}.mts`,
+    `${tsBase}.cts`,
+    resolve(tsBase, "index.ts"),
+    resolve(tsBase, "index.tsx"),
+    resolve(tsBase, "index.mts"),
+    resolve(tsBase, "index.cts"),
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function extractRelativeImports(source: string): string[] {
+  const imports: string[] = [];
+  const pushMatch = (regex: RegExp) => {
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(source)) !== null) {
+      const specifier = match[1];
+      if (specifier.startsWith(".")) imports.push(specifier);
+    }
+  };
+
+  pushMatch(/import\s+(?:[^"']*?\s+from\s+)?["']([^"']+)["']/g);
+  pushMatch(/export\s+[^"']*?\s+from\s+["']([^"']+)["']/g);
+  pushMatch(/import\(\s*["']([^"']+)["']\s*\)/g);
+  return imports;
+}
+
+async function collectSourceGraph(entryPath: string): Promise<string[]> {
+  const queue: string[] = [entryPath];
+  const visited = new Set<string>();
+
+  while (queue.length > 0) {
+    const file = queue.shift();
+    if (!file || visited.has(file)) continue;
+    visited.add(file);
+
+    let source = "";
+    try {
+      source = await readFile(file, "utf8");
+    } catch {
+      continue;
+    }
+
+    for (const specifier of extractRelativeImports(source)) {
+      const resolvedFile = resolveImportFile(file, specifier);
+      if (!resolvedFile || visited.has(resolvedFile)) continue;
+      queue.push(resolvedFile);
+    }
+  }
+
+  return [...visited].sort();
 }
 
 async function extractDocsFromSource(sourcePath: string): Promise<HelpDoc[]> {
@@ -631,15 +709,12 @@ async function extractDocsFromSource(sourcePath: string): Promise<HelpDoc[]> {
 
     const lines = extractHelpFromArrayBody(body);
     if (lines.length === 0) continue;
-    const description = extractDescriptionTag(captureFunctionJsDoc(source, fnName));
-    if (!description) {
-      throw new Error(`Missing @description JSDoc tag for ${fnName} in ${sourcePath}`);
-    }
-
+    const title = extractCommandTitle(lines, fnName);
+    const description = extractDescriptionTag(captureFunctionJsDoc(source, fnName)) ?? inferDescription(lines, title);
     const id = toSlug(fnName.replace(/help/gi, "")) || "command";
     docs.push({
       id,
-      title: extractCommandTitle(lines, fnName),
+      title,
       lines,
       sourceFile: sourcePath,
       description,
@@ -650,13 +725,11 @@ async function extractDocsFromSource(sourcePath: string): Promise<HelpDoc[]> {
   if (printHelpBody) {
     const lines = extractHelpFromConsoleLogs(printHelpBody);
     if (lines.length > 0) {
-      const description = extractDescriptionTag(captureFunctionJsDoc(source, "printHelp"));
-      if (!description) {
-        throw new Error(`Missing @description JSDoc tag for printHelp in ${sourcePath}`);
-      }
+      const title = extractCommandTitle(lines, "lally");
+      const description = extractDescriptionTag(captureFunctionJsDoc(source, "printHelp")) ?? inferDescription(lines, title);
       docs.push({
         id: "lally",
-        title: extractCommandTitle(lines, "lally"),
+        title,
         lines,
         sourceFile: sourcePath,
         description,
@@ -687,7 +760,6 @@ export async function runGenerateCliCommand(appRoot: string, rawArgs: string[]):
   const componentImportPathOverride = getStringFlag(flags, "component-import-path");
   const componentExportNameOverride = getStringFlag(flags, "component-export-name");
   const componentFilePathOverride = getStringFlag(flags, "component-file-path");
-  const sourcesOverride = parseCsv(getStringFlag(flags, "sources"));
 
   const configPath = resolve(appRoot, "lally.config.json");
   const config = await loadJson<LallyConfig>(configPath);
@@ -700,7 +772,6 @@ export async function runGenerateCliCommand(appRoot: string, rawArgs: string[]):
       componentImportPath: componentImportPathOverride,
       componentExportName: componentExportNameOverride,
       componentFilePath: componentFilePathOverride,
-      sources: sourcesOverride,
     });
     const entryPath = resolve(appRoot, entryOverride ?? cliConfig.entry);
     const outputDir = resolve(appRoot, outputOverride ?? cliConfig.outputDir);
@@ -716,11 +787,11 @@ export async function runGenerateCliCommand(appRoot: string, rawArgs: string[]):
       return 1;
     }
 
-    const sources = [entryPath, ...(cliConfig.sources ?? []).map((file) => resolve(appRoot, file))];
+    const sources = await collectSourceGraph(entryPath);
     const docsNested = await Promise.all(
       sources.map(async (file) => {
         if (!existsSync(file)) {
-          throw new Error(`Configured CLI source file not found: ${file}`);
+          throw new Error(`Discovered CLI source file not found: ${file}`);
         }
         return extractDocsFromSource(file);
       }),
@@ -728,7 +799,7 @@ export async function runGenerateCliCommand(appRoot: string, rawArgs: string[]):
 
     const docs = dedupeDocs(docsNested.flat());
     if (docs.length === 0) {
-      console.error("No CLI help docs discovered from configured sources.");
+      console.error("No CLI help docs discovered from entry source graph.");
       return 1;
     }
 
@@ -741,10 +812,7 @@ export async function runGenerateCliCommand(appRoot: string, rawArgs: string[]):
     for (const doc of docs) {
       const slug = toSlug(doc.id);
       const pageData = toPageData(doc);
-      if (!pageData.description) {
-        throw new Error(`Missing @description-derived page description for command: ${pageData.name}`);
-      }
-      const description = pageData.description;
+      const description = pageData.description ?? inferDescription(doc.lines, pageData.name);
       const mdx = `---\ntitle: ${yamlQuoted(pageData.name)}\ndescription: ${yamlQuoted(
         description,
       )}\nfull: true\n---\n\nimport { ${cliConfig.componentExportName} } from '${cliConfig.componentImportPath}';\n\n<${cliConfig.componentExportName} data={${JSON.stringify(pageData)}} />\n`;
